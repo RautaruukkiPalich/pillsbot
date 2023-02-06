@@ -51,17 +51,25 @@ def create_pill(db: Session, pill: schemas.PillCreate):
     return db_pill
 
 
+def get_pill_info(db: Session, pill_id: int):
+    """
+    return:
+    pill (object models.Pill)
+    pill.user_id(int owner_id)
+    pill.pill_name(str pill_name)
+    """
+    pill = db.query(models.Pill).filter(models.Pill.id == pill_id).first()
+    if pill:
+        return pill, pill.user_id, pill.pill_name
+    return None, None, None
+
 def get_pills(db: Session, user_id: int):
     pills = db.query(models.Pill).filter(models.Pill.user_id == user_id).order_by(models.Pill.pill_name.asc()).all()
     output_dict = {pill.id: pill.pill_name for pill in pills}
     return output_dict
 
 
-def del_pill(db: Session, pill_id: int):
-    db_pill = models.Pill(
-        id=pill_id,
-    )
-    db.delete(db_pill)
+def del_pill(db: Session, pill: models.Pill):
+    db.delete(pill)
     db.commit()
-    db.refresh(db_pill)
-    return db_pill
+    return pill

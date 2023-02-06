@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends
+
+from fastapi import FastAPI, Depends, Request, Response
+
 from sqlalchemy.orm import Session
 from db import crud, models, schemas
 from db.database import SessionLocal, engine
@@ -34,7 +36,7 @@ async def create_user(data: dict, db: Session = Depends(get_db)):
 
     with engine.connect():
         user, is_active, _ = crud.get_user_by_tg(db, tg_id=data["tg_id"])
-        if user and is_active:
+        if is_active:
             return {"message": "Пользователь уже существует в базе"}
         if user:
             crud.activate_user(db, user)
@@ -115,14 +117,40 @@ async def add_pill(data: dict, db: Session = Depends(get_db)):
     return {"message": f"{pill_name} добавлен"}
 
 
-@app.delete("/pills")
-async def post_pill(pill_id: str):
-    print(pill_id)
-    searching_item = [k for k, v in list_pills['pills'].items() if v == int(pill_id)]
-    print(searching_item)
-    del list_pills['pills'][searching_item[0]]
+@app.put("/pills/{id}")
+async def edit_pill(data: dict, db: Session = Depends(get_db)):
 
-    return {"message": f"{searching_item[0]} удалён"}
+    tg_id = data["tg_id"]
+    pill_id = int(data["pill_id"])
+
+    # with engine.connect():
+    #     user, is_active, user_id = crud.get_user_by_tg(db, tg_id=tg_id)
+    #     pill, pill_user_id, pill_name = crud.get_pill_info(db, pill_id=pill_id)
+    #     if not user or not pill:
+    #         return "Вы не можете это сделать"
+    #     if user_id != pill_user_id:
+    #         return "Это не ваше лекарство"
+    #     crud.del_pill(db, pill)
+
+    return {"message": f"{pill_id} изменён"}
+
+
+@app.delete("/pills/{id}")
+async def del_pill(data: dict, db: Session = Depends(get_db)):
+
+    tg_id = data["tg_id"]
+    pill_id = int(data["pill_id"])
+
+    with engine.connect():
+        user, is_active, user_id = crud.get_user_by_tg(db, tg_id=tg_id)
+        pill, pill_user_id, pill_name = crud.get_pill_info(db, pill_id=pill_id)
+        if not user or not pill:
+            return "Вы не можете это сделать"
+        if user_id != pill_user_id:
+            return "Это не ваше лекарство"
+        crud.del_pill(db, pill)
+
+    return {"message": f"{pill_name} удалён из списка ваших лекарств"}
 
 
 @app.get("/schedule")
