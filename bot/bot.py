@@ -3,7 +3,12 @@ import os
 import requests
 import json
 
+
 from aiogram import Bot, Dispatcher, executor, types
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import StatesGroup, State
+from aiogram.dispatcher.filters.builtin import Command
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
@@ -13,7 +18,12 @@ HOST_URL = os.environ.get("HOST_URL")
 TOKEN = os.environ.get("TG_TOKEN")
 
 bot = Bot(TOKEN)
-dp = Dispatcher(bot)
+#router = Router()
+dp = Dispatcher(bot, storage=MemoryStorage())
+
+
+class Form(StatesGroup):
+    enter_pill_name = State()
 
 
 @dp.message_handler(commands=['start'])
@@ -70,21 +80,29 @@ async def my_pills(message: types.Message):
 
 
 @dp.message_handler(commands=['addpill'])
-async def add_pill(message: types.Message):
-    url = f"{HOST_URL}/pills"
+async def add_pill(message: types.Message, state: FSMContext):
 
+    await Form.enter_pill_name.set()
     await message.reply(f"Напиши название лекарства, о котором я буду тебе напоминать")
 
-    @dp.handler()
-    async def text(message: types.Message):
-        tg_id = str(message.chat.id)
 
-        data = {"tg_id": tg_id, "pill_name": message.text}
+@dp.message_handler(state=Form.enter_pill_name)
+async def enter_pill_name(message: types.Message, state: FSMContext):
 
-        request = requests.post(url, data=json.dumps(data))
-        response = json.loads(request.text)
+    url = f"{HOST_URL}/pills"
+    data = dict()
 
-        await bot.send_message(message.chat.id, f"{response['message']}")
+    async with state.proxy():
+        data["pill_name"] = str(message.text)
+
+    tg_id = str(message.chat.id)
+    data["tg_id"] = tg_id
+
+    request = requests.post(url, data=json.dumps(data))
+    response = json.loads(request.text)
+
+    await state.finish()
+    await bot.send_message(message.chat.id, f"{response['message']}")
 
 
 @dp.message_handler(commands=['delpill'])
