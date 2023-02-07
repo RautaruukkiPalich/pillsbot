@@ -101,7 +101,7 @@ async def add_pill(data: dict, db: Session = Depends(get_db)):
     data: {'tg_id': str, 'pill_name': str}
     """
 
-    pill_name = data["pill_name"].title()
+    pill_name = data["pill_name"]
     tg_id = data["tg_id"]
 
     with engine.connect():

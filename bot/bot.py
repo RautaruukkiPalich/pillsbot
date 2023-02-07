@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from aiogram.dispatcher.filters.builtin import Command
+from aiogram.dispatcher.filters import Text
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv())
@@ -18,7 +18,6 @@ HOST_URL = os.environ.get("HOST_URL")
 TOKEN = os.environ.get("TG_TOKEN")
 
 bot = Bot(TOKEN)
-#router = Router()
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 
@@ -83,19 +82,27 @@ async def my_pills(message: types.Message):
 async def add_pill(message: types.Message, state: FSMContext):
 
     await Form.enter_pill_name.set()
-    await message.reply(f"Напиши название лекарства, о котором я буду тебе напоминать")
+    await message.reply(f"Напиши название лекарства, о котором я буду тебе напоминать.\n\n"
+                        f" Для отмены заполнения этого поля можно нажать /cancel")
 
 
 @dp.message_handler(state=Form.enter_pill_name)
+@dp.message_handler(Text(equals='cancel', ignore_case=True), state=Form.enter_pill_name)
 async def enter_pill_name(message: types.Message, state: FSMContext):
 
     url = f"{HOST_URL}/pills"
     data = dict()
 
-    async with state.proxy():
-        data["pill_name"] = str(message.text)
+    if message.text == "/cancel":
+        await bot.send_message(message.chat.id, f"Отменил заполнение поля")
+        await state.finish()
+        return
+    if message.text[0] == "/":
+        await bot.send_message(message.chat.id, f"Некорректные данные")
+        return
 
     tg_id = str(message.chat.id)
+    data["pill_name"] = str(message.text).title()
     data["tg_id"] = tg_id
 
     request = requests.post(url, data=json.dumps(data))
