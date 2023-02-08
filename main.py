@@ -1,9 +1,10 @@
+import uvicorn
 
-from fastapi import FastAPI, Depends, Request, Response
-
+from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from db import crud, models, schemas
 from db.database import SessionLocal, engine
+
 
 app = FastAPI()
 
@@ -19,11 +20,6 @@ def get_db():
 @app.get("/")
 async def root():
     return {"message": "Ну и шо мы тут забыли?"}
-
-
-@app.get("/user")
-async def get_user():
-    return {"message": "user"}
 
 
 # response_model=schemas.UserCreate
@@ -82,7 +78,7 @@ async def get_pill(data: dict, db: Session = Depends(get_db)):
     Add pill list from DB\n
     data: {'tg_id': str}
     """
-    tg_id = data["tg_id"]
+    tg_id = str(data["tg_id"])
 
     with engine.connect():
         user, is_active, user_id = crud.get_user_by_tg(db, tg_id=tg_id)
@@ -101,7 +97,7 @@ async def add_pill(data: dict, db: Session = Depends(get_db)):
     data: {'tg_id': str, 'pill_name': str}
     """
 
-    pill_name = data["pill_name"]
+    pill_name = data["pill_name"].capitalize()
     tg_id = data["tg_id"]
 
     with engine.connect():
@@ -117,37 +113,47 @@ async def add_pill(data: dict, db: Session = Depends(get_db)):
     return {"message": f"{pill_name} добавлен"}
 
 
-@app.put("/pills/{id}")
+@app.patch("/pills/{id}")
 async def edit_pill(data: dict, db: Session = Depends(get_db)):
+    """
+    Edit pill_name in DB\n
+    data: {'tg_id': str, 'pill_name': str, 'pill_id': str/int}
+    """
 
-    tg_id = data["tg_id"]
+    tg_id = str(data["tg_id"])
     pill_id = int(data["pill_id"])
+    pill_name = str(data["pill_name"]).capitalize()
 
-    # with engine.connect():
-    #     user, is_active, user_id = crud.get_user_by_tg(db, tg_id=tg_id)
-    #     pill, pill_user_id, pill_name = crud.get_pill_info(db, pill_id=pill_id)
-    #     if not user or not pill:
-    #         return "Вы не можете это сделать"
-    #     if user_id != pill_user_id:
-    #         return "Это не ваше лекарство"
-    #     crud.del_pill(db, pill)
+    with engine.connect():
+        user, _, user_id = crud.get_user_by_tg(db, tg_id=tg_id)
+        pill, pill_user_id, _ = crud.get_pill_info(db, pill_id=pill_id)
 
-    return {"message": f"{pill_id} изменён"}
+        if not user or not pill:
+            return {"message": "Вы не можете это сделать"}
+        if user_id != pill_user_id:
+            return {"message": "Это не ваше лекарство"}
+        crud.edit_pill_name(db, pill, pill_name)
+
+    return {"message": f"{pill_name}: название изменено"}
 
 
 @app.delete("/pills/{id}")
 async def del_pill(data: dict, db: Session = Depends(get_db)):
+    """
+    Delete pill from DB\n
+    data: {'tg_id': str, 'pill_id': str/int}
+    """
 
-    tg_id = data["tg_id"]
+    tg_id = str(data["tg_id"])
     pill_id = int(data["pill_id"])
 
     with engine.connect():
         user, is_active, user_id = crud.get_user_by_tg(db, tg_id=tg_id)
         pill, pill_user_id, pill_name = crud.get_pill_info(db, pill_id=pill_id)
         if not user or not pill:
-            return "Вы не можете это сделать"
+            return {"message": "Вы не можете это сделать"}
         if user_id != pill_user_id:
-            return "Это не ваше лекарство"
+            return {"message": "Это не ваше лекарство"}
         crud.del_pill(db, pill)
 
     return {"message": f"{pill_name} удалён из списка ваших лекарств"}
@@ -156,3 +162,7 @@ async def del_pill(data: dict, db: Session = Depends(get_db)):
 @app.get("/schedule")
 async def get_schedule():
     return {"message": "schedule"}
+
+
+if __name__ == '__main__':
+    uvicorn.run("__main__:app", host='localhost', port=8000, reload=True)

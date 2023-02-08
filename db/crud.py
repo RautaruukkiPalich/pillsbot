@@ -63,6 +63,7 @@ def get_pill_info(db: Session, pill_id: int):
         return pill, pill.user_id, pill.pill_name
     return None, None, None
 
+
 def get_pills(db: Session, user_id: int):
     pills = db.query(models.Pill).filter(models.Pill.user_id == user_id).order_by(models.Pill.pill_name.asc()).all()
     output_dict = {pill.id: pill.pill_name for pill in pills}
@@ -73,3 +74,11 @@ def del_pill(db: Session, pill: models.Pill):
     db.delete(pill)
     db.commit()
     return pill
+
+
+def edit_pill_name(db: Session, pill: models.Pill, pill_name: str):
+    pill.pill_name = pill_name
+    db.commit()
+    db.refresh(pill)
+    return pill
+
