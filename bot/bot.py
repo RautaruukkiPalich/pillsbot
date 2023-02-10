@@ -6,16 +6,24 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT
-from functions import create_markup
+from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE
+from functions import create_markup, create_markup_pill
 
 
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 
-class EnterPillName(StatesGroup):
+class CreateUser(StatesGroup):
+    callback_timezone = State()
+
+
+class AddPill(StatesGroup):
     enter_pill_name = State()
+
+
+class DelPill(StatesGroup):
+    callback_pill_id = State()
 
 
 class EditPillName(StatesGroup):
@@ -31,7 +39,7 @@ class EnterScheduleTime(StatesGroup):
 
 
 @dp.message_handler(commands=['start'])
-async def start_bot(message: types.Message):
+async def start_bot(message: types.Message, state: FSMContext):
     url = f"{HOST_URL}/user"
 
     tg_id = str(message.chat.id)
@@ -44,15 +52,61 @@ async def start_bot(message: types.Message):
     if surname is None:
         surname = " "
 
-    data = {"tg_id": tg_id,
-            "first_name": name,
-            "last_name": surname,
-            }
+    data = {"tg_id": tg_id}
+    request = requests.get(url, data=json.dumps(data))
+    response = json.loads(request.text)
+
+    if response["in_db"] == "true":
+        data = {"tg_id": tg_id,
+                "first_name": name,
+                "last_name": surname,
+                "timezone": ""
+                }
+
+        request = requests.post(url, data=json.dumps(data))
+        response = json.loads(request.text)
+
+        await message.reply(f"{response['message']}")
+        return
+
+    markup = create_markup(TIMEZONE)
+    text_message = f"Выберите ваш часовой пояс"
+
+    async with state.proxy() as memo:
+        memo["tg_id"] = tg_id
+        memo["first_name"] = name
+        memo["last_name"] = surname
+        memo["url"] = url
+        memo["message"] = message
+        memo["text_message"] = text_message
+
+    await CreateUser.callback_timezone.set()
+    await message.reply(text_message, reply_markup=markup)
+
+
+@dp.callback_query_handler(state=CreateUser.callback_timezone)
+async def start_bot(callback: types.CallbackQuery, state: FSMContext):
+
+    data = dict()
+
+    async with state.proxy() as memo:
+        data["tg_id"] = memo["tg_id"]
+        data["first_name"] = memo["first_name"]
+        data["last_name"] = memo["last_name"]
+        url = memo["url"]
+        text_message = memo["text_message"]
+        message = memo["message"]
+
+    await callback.message.edit_text(text_message, reply_markup=None)
+
+    data["timezone"] = TIMEZONE[int(callback.data)].split()[0]
+    print(data)
 
     request = requests.post(url, data=json.dumps(data))
     response = json.loads(request.text)
 
-    await message.reply(f"{response['message']}")
+    await state.finish()
+    await bot.send_message(message.chat.id, f"{response['message']}")
 
 
 @dp.message_handler(commands=['bye'])
@@ -78,7 +132,11 @@ async def my_pills(message: types.Message):
     request = requests.get(url, data=json.dumps(data))
     response = json.loads(request.text)
 
-    pills_list = "\n".join(f"• {val}" for _, val in response["message"].items())
+    if response["in_db"] == "false":
+        await message.answer(response["message"])
+        return
+
+    pills_list = "\n".join(f"• {val['name']}" for _, val in response["message"].items())
 
     await message.answer(f"Вот список твоих лекарств:\n\n{pills_list}")
 
@@ -86,12 +144,12 @@ async def my_pills(message: types.Message):
 @dp.message_handler(commands=['addpill'])
 async def add_pill(message: types.Message, state: FSMContext):
 
-    await EnterPillName.enter_pill_name.set()
+    await AddPill.enter_pill_name.set()
     await message.reply(f"Напиши название лекарства, о котором я буду тебе напоминать.\n\n"
                         f" Для отмены заполнения этого поля можно нажать /cancel")
 
 
-@dp.message_handler(state=EnterPillName.enter_pill_name)
+@dp.message_handler(state=AddPill.enter_pill_name)
 async def enter_pill_name(message: types.Message, state: FSMContext):
 
     url = f"{HOST_URL}/pills"
@@ -128,7 +186,7 @@ async def del_pill(message: types.Message, state: FSMContext):
     request = requests.get(url, data=json.dumps(data))
     response = json.loads(request.text)
 
-    markup = create_markup(response["message"])
+    markup = create_markup_pill(response["message"])
 
     async with state.proxy() as memo:
         memo['message'] = message
@@ -136,11 +194,11 @@ async def del_pill(message: types.Message, state: FSMContext):
         memo['tg_id'] = message.chat.id
         memo['url'] = url
 
-    await EnterPillName.enter_pill_name.set()
+    await DelPill.callback_pill_id.set()
     await message.reply(text_message, reply_markup=markup)
 
 
-@dp.callback_query_handler(state=EnterPillName)
+@dp.callback_query_handler(state=DelPill)
 async def text(callback: types.CallbackQuery, state: FSMContext):
     async with state.proxy() as memo:
         pass
@@ -172,7 +230,7 @@ async def edit_pill(message: types.Message, state: FSMContext):
     request = requests.get(url, data=json.dumps(data))
     response = json.loads(request.text)
 
-    markup = create_markup(response["message"])
+    markup = create_markup_pill(response["message"])
 
     async with state.proxy() as memo:
         memo['message'] = message
@@ -227,7 +285,7 @@ async def edit_pill_name(message: types.Message, state: FSMContext):
     await bot.send_message(message.chat.id, text)
 
 
-@dp.message_handler(commands=['schedule'])
+@dp.message_handler(commands=['add_schedule'])
 async def new_schedule(message: types.Message, state: FSMContext):
     url_sched = f"{HOST_URL}/schedule"
     url_pill = f"{HOST_URL}/pills"
@@ -245,7 +303,7 @@ async def new_schedule(message: types.Message, state: FSMContext):
     request = requests.get(url_pill, data=json.dumps(data))
     response = json.loads(request.text)
 
-    markup = create_markup(response["message"])
+    markup = create_markup_pill(response["message"])
 
     await EnterScheduleTime.callback_time4zone.set()
     await message.reply(text_message, reply_markup=markup)
@@ -306,15 +364,43 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text(text_message)
 
+    tg_id = memo["tg_id"]
+    pill_id = memo["pill_id"]
+    url_sched = memo["url_sched"]
     choosen_time = TIME_SELECT[time4zone][time_select]
-
-    text_message = f"Вы выбрали время: {choosen_time}"
 
     async with state.proxy() as memo:
         memo["time"] = callback.data
 
+    data = {"tg_id": tg_id, "pill_id": pill_id, "timer": choosen_time}
+
+    request = requests.post(f"{url_sched}", data=json.dumps(data))
+    response = json.loads(request.text)
+
     await state.finish()
-    await message.reply(text_message, reply_markup=None)
+    await message.reply(response["message"])
+
+
+@dp.message_handler(commands=['schedule'])
+async def new_schedule(message: types.Message):
+    url_sched = f"{HOST_URL}/schedule"
+
+    text_message = f"Твои лекарстава и время их напоминания:\n"
+
+    data = {"tg_id": str(message.chat.id)}
+
+    request = requests.get(url_sched, data=json.dumps(data))
+    response = json.loads(request.text)
+
+    if response["in_db"] != "true":
+        text_message = f"нет ничего"
+        await message.reply(text_message)
+        return
+
+    for key, value in response["message"].items():
+        text_message += f"\n{'•':>3}{value['name']}\n{', '.join(value['schedules'])}\n"
+
+    await message.reply(text_message)
 
 
 @dp.message_handler(commands=['end'])

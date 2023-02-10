@@ -14,7 +14,7 @@ class User(Base):
     first_name = Column(String(50), default=" ")
     last_name = Column(String(50), default=" ")
     tg_id = Column(String(20), nullable=False)
-    timezone = Column(Integer, ForeignKey("timedelta.id"), nullable=True)
+    timezone = Column(String, nullable=True, default="0", )
     is_active = Column(Boolean, default=True, nullable=False)
     created_on = Column(DateTime(), default=datetime.now)
     updated_on = Column(DateTime(), default=datetime.now, onupdate=datetime.now)
@@ -45,14 +45,16 @@ class Pill(Base):
     )
 
 
-class Timedelta(Base):
-    __tablename__ = "timedelta"
+class SchedulePills(Base):
+    __tablename__ = "schedulepills"
 
     id = Column(Integer, primary_key=True)
-    delta = Column(DateTime, nullable=False, unique=True)
+    timer = Column(String, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    pill_id = Column(Integer, ForeignKey("pills.id"))
     created_on = Column(DateTime(), default=datetime.now)
     updated_on = Column(DateTime(), default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
-        PrimaryKeyConstraint('id', name='timedelta_id'),
+        PrimaryKeyConstraint('id', name='schedulepill_id'),
     )

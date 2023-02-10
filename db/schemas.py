@@ -29,6 +29,7 @@ class UserCreate(UserBase):
     tg_id: str
     first_name: str
     last_name: str
+    timezone: str
 
 
 class User(UserBase):
@@ -42,5 +43,23 @@ class User(UserBase):
     class Config:
         orm_mode = True
 
+
+class SchBase(BaseModel):
+    pass
+
+
+class SchCreate(SchBase):
+    user_id: int
+    pill_id: int
+    timer: str
+
+
+class Sch(SchBase):
+    id: int
+    created_on: datetime
+    updated_on: datetime
+
+    class Config:
+        orm_mode = True
 
 
