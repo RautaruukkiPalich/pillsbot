@@ -4,6 +4,8 @@ from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from db import crud, models, schemas
 from db.database import SessionLocal, engine
+from samples.json import SAMPLE_JSON
+from copy import deepcopy
 
 
 app = FastAPI()
@@ -23,72 +25,100 @@ async def root():
 
 
 @app.get("/user")
-async def get_user(data: dict, db: Session = Depends(get_db)):
+async def get_user(context: dict, db: Session = Depends(get_db)):
     """
-    Get user from DB\n
-    data: {'tg_id': str}
+    Get user info from DB\n
+    {'tg_id': str}
     """
-    tg_id = str(data["tg_id"])
+
+    tg_id = str(context["tg_id"])
+
+    output_json = deepcopy(SAMPLE_JSON)
 
     with engine.connect():
         user = crud.get_user_by_tg(db, tg_id=tg_id)
         if user is not None:
-            if user.is_active:
-                return {"in_db": "true", "message": "Пользователь уже существует в базе"}
-            crud.activate_user(db, user)
-            return {"in_db": "true", "message": "Пользователь восстановлен"}
+            output_json["in_database"] = True
+            output_json["user"]["id"] = user.id
+            output_json["user"]["tg"] = user.tg_id
+            output_json["user"]["name"] = user.first_name
+            output_json["user"]["surname"] = user.last_name
+            output_json["user"]["is_active"] = user.is_active
+            output_json["user"]["timezone"] = user.timezone
+            output_json["text"] = "Пользователь уже существует в базе"
+            return output_json
 
-    return {"in_db": "false"}
+    output_json["in_database"] = False
+    output_json["user"]["is_active"] = False
+    output_json["text"] = "Пользователь не существует в базе"
+    return output_json
 
 
 # response_model=schemas.UserCreate
 @app.post("/user")
-async def create_user(data: dict, db: Session = Depends(get_db)):
+async def create_user(context: dict, db: Session = Depends(get_db)):
     """
     Add user to DB\n
-    data: {'tg_id': str, 'first_name': str, 'last_name': str, 'timezone': str}
+    context: {'tg_id': str|int, 'first_name': str, 'last_name': str, 'timezone': str}
     """
 
-    tg_id = str(data["tg_id"])
-    first_name = data["first_name"]
-    last_name = data["last_name"]
-    timezone = str(data["timezone"])
+    tg_id = str(context["tg_id"])
+    first_name = str(context["first_name"])
+    last_name = str(context["last_name"])
+    timezone = str(context["timezone"])
+
+    if first_name is None:
+        first_name = ""
+
+    if last_name is None:
+        last_name = ""
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=tg_id)
-        if user is not None:
-            if user.is_active:
-                crud.activate_user(db, user)
-                return {"message": "Пользователь восстановлен"}
-            return {"message": "Пользователь уже существует в базе"}
+        user_info = await get_user(context, db)
+        if user_info["in_database"]:
+            if not user_info["user"]["is_active"]:
+                user = crud.get_user_by_tg(db, tg_id=tg_id)
+                crud.activate_user(db, user, timezone)
+                user_info["text"] = "Пользователь восстановлен"
+            return user_info
         else:
-            crud.create_user(db, schemas.UserCreate(
+            await crud.create_user(db, schemas.UserCreate(
                 tg_id=tg_id,
                 first_name=first_name,
                 last_name=last_name,
                 timezone=timezone,
             ))
+            user_info = await get_user(context, db)
+            user_info["text"] = "Пользователь успешно добавлен"
 
-    return {"message": "Пользователь успешно добавлен"}
+    return user_info
 
 
 # , response_model=schemas.UserDelete)
 @app.delete("/user")
-async def delete_user(data: dict, db: Session = Depends(get_db)):
+async def delete_user(context: dict, db: Session = Depends(get_db)):
     """
     Remove user from DB\n
-    data: {'tg_id': str}
+    context: {'tg_id': str|int}
     """
+    tg_id = str(context["tg_id"])
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=data["tg_id"])
-        if not user:
-            return {"message": "Пользователь не существует"}
-        if user.is_active:
-            return {"message": "Пользователь уже удалён"}
-        crud.delete_user(db, user)
+        user_info = await get_user(context, db)
 
-    return {"message": "Пользователь удалён"}
+        if not user_info["in_database"]:
+            user_info["text"] = "Пользователь не существует"
+            return user_info
+
+        if not user_info["user"]["is_active"]:
+            user_info["text"] = "Пользователь уже удалён"
+            return user_info
+
+        user = crud.get_user_by_tg(db, tg_id=tg_id)
+        crud.delete_user(db, user)
+        user_info["text"] = "Пользователь удалён"
+
+    return user_info
 
 
 @app.get("/pills")

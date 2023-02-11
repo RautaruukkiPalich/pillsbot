@@ -42,43 +42,24 @@ class EnterScheduleTime(StatesGroup):
 async def start_bot(message: types.Message, state: FSMContext):
     url = f"{HOST_URL}/user"
 
-    tg_id = str(message.chat.id)
-    name = message.chat.first_name
-    surname = message.chat.last_name
+    data = dict()
+    data["tg_id"] = message.chat.id
 
-    if name is None:
-        name = " "
-
-    if surname is None:
-        surname = " "
-
-    data = {"tg_id": tg_id}
     request = requests.get(url, data=json.dumps(data))
     response = json.loads(request.text)
 
-    if response["in_db"] == "true":
-        data = {"tg_id": tg_id,
-                "first_name": name,
-                "last_name": surname,
-                "timezone": ""
-                }
-
-        request = requests.post(url, data=json.dumps(data))
-        response = json.loads(request.text)
-
-        await message.reply(f"{response['message']}")
+    if response["in_database"] and response["user"]["is_active"]:
+        await message.reply(response["text"])
         return
 
     markup = create_markup(TIMEZONE)
     text_message = f"Выберите ваш часовой пояс"
 
     async with state.proxy() as memo:
-        memo["tg_id"] = tg_id
-        memo["first_name"] = name
-        memo["last_name"] = surname
         memo["url"] = url
         memo["message"] = message
         memo["text_message"] = text_message
+        memo["data"] = data
 
     await CreateUser.callback_timezone.set()
     await message.reply(text_message, reply_markup=markup)
@@ -87,40 +68,33 @@ async def start_bot(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(state=CreateUser.callback_timezone)
 async def start_bot(callback: types.CallbackQuery, state: FSMContext):
 
-    data = dict()
-
     async with state.proxy() as memo:
-        data["tg_id"] = memo["tg_id"]
-        data["first_name"] = memo["first_name"]
-        data["last_name"] = memo["last_name"]
         url = memo["url"]
         text_message = memo["text_message"]
         message = memo["message"]
+        data = memo["data"]
 
-    await callback.message.edit_text(text_message, reply_markup=None)
-
+    data["first_name"] = message.chat.first_name
+    data["last_name"] = message.chat.last_name
     data["timezone"] = TIMEZONE[int(callback.data)].split()[0]
-    print(data)
 
     request = requests.post(url, data=json.dumps(data))
     response = json.loads(request.text)
 
     await state.finish()
-    await bot.send_message(message.chat.id, f"{response['message']}")
+    await callback.message.edit_text(text_message, reply_markup=None)
+    await bot.send_message(message.chat.id, f"{response['text']}")
 
 
 @dp.message_handler(commands=['bye'])
 async def stop_bot(message: types.Message):
     url = f"{HOST_URL}/user"
-
-    tg_id = str(message.chat.id)
-
-    data = {"tg_id": tg_id}
+    data = {"tg_id": message.chat.id}
 
     request = requests.delete(url, data=json.dumps(data))
     response = json.loads(request.text)
 
-    await message.reply(f"{response['message']}")
+    await message.reply(f"{response['text']}")
 
 
 @dp.message_handler(commands=['mypills'])

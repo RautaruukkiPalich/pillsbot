@@ -23,8 +23,9 @@ def delete_user(db: Session, user: models.User):
     return user
 
 
-def activate_user(db: Session, user: models.User):
+def activate_user(db: Session, user: models.User, timezone):
     user.is_active = True
+    user.timezone = timezone
     db.commit()
     db.refresh(user)
     return user
