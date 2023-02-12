@@ -8,7 +8,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE
-from functions import create_markup, create_markup_pill
+from functions import create_markup, create_markup_pill, create_markup_timers
 
 
 bot = Bot(TOKEN)
@@ -36,6 +36,11 @@ class EnterScheduleTime(StatesGroup):
     callback_pill_id = State()
     callback_time4zone = State()
     callback_time = State()
+    db_query = State()
+
+
+class DelScheduleTime(StatesGroup):
+    callback_pill_id = State()
     db_query = State()
 
 
@@ -163,7 +168,7 @@ async def enter_pill_name(message: types.Message, state: FSMContext):
     context = dict()
 
     if message.text[0] == "/":
-        await message.reply("Некорректные данные")
+        await message.reply("Название не может начинаться с '/'")
         return
 
     context["pill_name"] = str(message.text)
@@ -225,7 +230,7 @@ async def text(callback: types.CallbackQuery, state: FSMContext):
     response = json.loads(request.text)
 
     await state.finish()
-    await message.answer(f"{response['text']}" if request.status_code == 200 else f"Ошибка, попробуйте позже")
+    await message.answer(f"{response['text']}")# if request.status_code == 200 else f"Ошибка, попробуйте позже")
 
 
 @dp.message_handler(commands=['editpill'])
@@ -246,7 +251,7 @@ async def edit_pill(message: types.Message, state: FSMContext):
     request = requests.get(url, data=json.dumps(context))
     response = json.loads(request.text)
 
-    markup = create_markup_pill(response["message"])
+    markup = create_markup_pill(response["pills"])
 
     async with state.proxy() as memo:
         memo['context'] = context
@@ -275,7 +280,7 @@ async def callback(callback: types.CallbackQuery, state: FSMContext):
 async def edit_pill_name(message: types.Message, state: FSMContext):
 
     if message.text[0] == "/":
-        await bot.send_message(message.chat.id, "Некорректные данные")
+        await message.reply("Название не может начинаться с '/'")
         return
 
     async with state.proxy() as memo:
@@ -297,19 +302,27 @@ async def new_schedule(message: types.Message, state: FSMContext):
     url_pill = f"{HOST_URL}/pills"
     text_message = f"Выбери название лекарства, для которого вы хотите назначить время напоминания"
 
+    tg_id = str(message.chat.id)
+    context = {"tg_id": tg_id}
+
+    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response = json.loads(request.text)
+
+    if not response["in_database"] or not response["user"]["is_active"]:
+        await message.answer(response["text"])
+        return
+
     async with state.proxy() as memo:
-        memo["tg_id"] = message.chat.id
+        memo["context"] = context
         memo["url_sched"] = url_sched
         memo["url_pill"] = url_pill
         memo["message"] = message
         memo["text_message"] = text_message
 
-    data = {"tg_id": memo["tg_id"]}
-
-    request = requests.get(url_pill, data=json.dumps(data))
+    request = requests.get(url_pill, data=json.dumps(context))
     response = json.loads(request.text)
 
-    markup = create_markup_pill(response["message"])
+    markup = create_markup_pill(response["pills"])
 
     await EnterScheduleTime.callback_time4zone.set()
     await message.reply(text_message, reply_markup=markup)
@@ -318,16 +331,15 @@ async def new_schedule(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(state=EnterScheduleTime.callback_time4zone)
 async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     async with state.proxy() as memo:
-        pass
-    text_message = memo["text_message"]
-    message = memo["message"]
+        text_message = memo["text_message"]
+        message = memo["message"]
 
     await callback.message.edit_text(text_message)
 
     text_message = "Выберите временной интервал из предложенных"
 
     async with state.proxy() as memo:
-        memo["pill_id"] = callback.data
+        memo["context"]["pill_id"] = callback.data
         memo["text_message"] = text_message
 
     markup = create_markup(TIME_4ZONE)
@@ -339,20 +351,20 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(state=EnterScheduleTime.callback_time)
 async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     async with state.proxy() as memo:
-        pass
-
-    text_message = memo["text_message"]
-    message = memo["message"]
+        text_message = memo["text_message"]
+        message = memo["message"]
 
     await callback.message.edit_text(text_message)
 
     text_message = "Выберите подходящее время"
+    time_period = int(callback.data)
+
 
     async with state.proxy() as memo:
-        memo["time4zone"] = int(callback.data)
+        memo["time4zone"] = time_period
         memo["text_message"] = text_message
 
-    markup = create_markup(TIME_SELECT[int(callback.data)])
+    markup = create_markup(TIME_SELECT[time_period])
 
     await EnterScheduleTime.db_query.set()
     await message.reply(text_message, reply_markup=markup)
@@ -361,52 +373,128 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
 @dp.callback_query_handler(state=EnterScheduleTime.db_query)
 async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     async with state.proxy() as memo:
-        pass
-
-    text_message = memo["text_message"]
-    message = memo["message"]
-    time4zone = memo["time4zone"]
-    time_select = int(callback.data)
+        text_message = memo["text_message"]
+        message = memo["message"]
+        time4zone = memo["time4zone"]
+        context = memo["context"]
+        url_sched = memo["url_sched"]
 
     await callback.message.edit_text(text_message)
 
-    tg_id = memo["tg_id"]
-    pill_id = memo["pill_id"]
-    url_sched = memo["url_sched"]
-    choosen_time = TIME_SELECT[time4zone][time_select]
+    time_select = int(callback.data)
+    context["timer"] = TIME_SELECT[time4zone][time_select]
 
-    async with state.proxy() as memo:
-        memo["time"] = callback.data
-
-    data = {"tg_id": tg_id, "pill_id": pill_id, "timer": choosen_time}
-
-    request = requests.post(f"{url_sched}", data=json.dumps(data))
+    request = requests.post(f"{url_sched}", data=json.dumps(context))
     response = json.loads(request.text)
 
     await state.finish()
-    await message.reply(response["message"])
+    await message.reply(response["text"])
 
 
 @dp.message_handler(commands=['schedule'])
-async def new_schedule(message: types.Message):
+async def schedule(message: types.Message):
     url_sched = f"{HOST_URL}/schedule"
-
     text_message = f"Твои лекарстава и время их напоминания:\n"
+    tg_id = str(message.chat.id)
+    context = {"tg_id": tg_id}
 
-    data = {"tg_id": str(message.chat.id)}
-
-    request = requests.get(url_sched, data=json.dumps(data))
+    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
     response = json.loads(request.text)
 
-    if response["in_db"] != "true":
-        text_message = f"нет ничего"
-        await message.reply(text_message)
+    if not response["in_database"] or not response["user"]["is_active"]:
+        await message.answer(response["text"])
         return
 
-    for key, value in response["message"].items():
-        text_message += f"\n{'•':>3}{value['name']}\n{', '.join(value['schedules'])}\n"
+    request = requests.get(url_sched, data=json.dumps(context))
+    response = json.loads(request.text)
+
+    for pill in response["pills"]:
+        timers = [timer["timer"] for timer in pill['timers']]
+        timers = sorted(timers, key=lambda time: int(time.replace(":", "")))
+        text_message += f"\n{pill['name']}\n{', '.join(timers)}\n"
 
     await message.reply(text_message)
+
+
+@dp.message_handler(commands=['del_schedule'])
+async def del_schedule(message: types.Message, state: FSMContext):
+    url_sched = f"{HOST_URL}/schedule"
+    url_pill = f"{HOST_URL}/pills"
+    text_message = f"Выбери название лекарства, для которого вы хотите удалить напоминание"
+
+    tg_id = str(message.chat.id)
+    context = {"tg_id": tg_id}
+
+    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response = json.loads(request.text)
+
+    if not response["in_database"] or not response["user"]["is_active"]:
+        await message.answer(response["text"])
+        return
+
+    request = requests.get(url_sched, data=json.dumps(context))
+    response = json.loads(request.text)
+
+    async with state.proxy() as memo:
+        memo["context"] = context
+        memo["url_sched"] = url_sched
+        memo["url_pill"] = url_pill
+        memo["message"] = message
+        memo["text_message"] = text_message
+        memo["data"] = response
+
+    markup = create_markup_pill(response["pills"])
+
+    await DelScheduleTime.callback_pill_id.set()
+    await message.reply(text_message, reply_markup=markup)
+
+
+@dp.callback_query_handler(state=DelScheduleTime.callback_pill_id)
+async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
+    async with state.proxy() as memo:
+        text_message = memo["text_message"]
+        message = memo["message"]
+        data = memo["data"]
+        context = memo["context"]
+
+    await callback.message.edit_text(text_message)
+
+    text_message = "Выберите время, которое вы хотите удалить"
+    context["pill_id"] = callback.data
+
+    async with state.proxy() as memo:
+        memo["context"] = context
+        memo["text_message"] = text_message
+
+    search_elem = [pill["timers"] for pill in data["pills"] if pill["id"] == int(callback.data)][0]
+    dict_shuffle_timers = {timer["id"]: timer["timer"] for timer in search_elem}
+    tuple_timers = sorted(dict_shuffle_timers.items(), key=lambda value: int(value[1].replace(":", "")))
+    dict_timers = dict(tuple_timers)
+
+    markup = create_markup(dict_timers)
+
+    await DelScheduleTime.db_query.set()
+    await message.reply(text_message, reply_markup=markup)
+
+
+@dp.callback_query_handler(state=DelScheduleTime.db_query)
+async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
+    async with state.proxy() as memo:
+        text_message = memo["text_message"]
+        message = memo["message"]
+        context = memo["context"]
+        url_sched = memo["url_sched"]
+
+    await callback.message.edit_text(text_message)
+
+    timer_id = int(callback.data)
+    context["timer_id"] = timer_id
+
+    request = requests.delete(f"{url_sched}/{timer_id}", data=json.dumps(context))
+    response = json.loads(request.text)
+
+    await state.finish()
+    await message.reply(response["text"])
 
 
 @dp.message_handler(commands=['end'])

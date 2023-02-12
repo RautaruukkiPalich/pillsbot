@@ -222,40 +222,75 @@ async def del_pill(context: dict, db: Session = Depends(get_db)):
 
 
 @app.get("/schedule")
-async def get_schedule(data: dict, db: Session = Depends(get_db)):
-    tg_id = str(data["tg_id"])
+async def get_schedule(context: dict, db: Session = Depends(get_db)):
+    tg_id = str(context["tg_id"])
+    output_json = await get_user(context, db)
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=tg_id)
-        if user and user.is_active:
-            list_pills = crud.get_schedule(db, user_id=user.id)
-        else:
-            return {"in_db": "false", "message": "Пользователь не зарегистрирован"}
+        if output_json["in_database"] and output_json["user"]["is_active"]:
+            user = crud.get_user_by_tg(db, tg_id=tg_id)
+            output_json["pills"] = crud.get_schedule(db, user.id)
 
-    return {"in_db": "true", "message": list_pills}
+    return output_json
 
 
 @app.post("/schedule")
-async def post_schedule(data: dict, db: Session = Depends(get_db)):
-    tg_id = str(data["tg_id"])
-    pill_id = int(data["pill_id"])
-    timer = str(data["timer"])
+async def post_schedule(context: dict, db: Session = Depends(get_db)):
+    tg_id = str(context["tg_id"])
+    pill_id = int(context["pill_id"])
+    timer = str(context["timer"])
+    output_json = await get_user(context, db)
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=tg_id)
-        pill = crud.get_pill(db, pill_id=pill_id)
-        if not user or not pill:
-            return {"message": "Вы не можете это сделать"}
-        if user.id != pill.user_id:
-            return {"message": "Это не ваше лекарство"}
+        if output_json["in_database"] and output_json["user"]["is_active"]:
+            user = crud.get_user_by_tg(db, tg_id=tg_id)
+            pill = crud.get_pill(db, pill_id=pill_id)
+            if user.id != pill.user_id:
+                output_json["text"] = "Это не ваше лекарство"
+                return output_json
 
-        crud.add_sch_timer(db, schemas.SchCreate(
-            user_id=user.id,
-            pill_id=pill.id,
-            timer=timer,
-        ))
+            list_schedule = crud.get_schedule(db, user.id)
 
-    return {"message": f"Я буду напоминать вам о приёме {pill.pill_name} ежедневно в {timer}"}
+            for pill_elem in list_schedule:
+                if pill_elem["id"] == pill_id:
+                    timers = [timer["timer"] for timer in pill_elem['timers']]
+                    if timer in timers:
+                        output_json["text"] = "У вас уже выбрано это время"
+                        return output_json
+
+            crud.add_sch_timer(db, schemas.SchCreate(
+                user_id=user.id,
+                pill_id=pill.id,
+                timer=timer,
+            ))
+            output_json["text"] = f"Я буду напоминать вам о приёме {pill.pill_name} ежедневно в {timer}"
+
+    return output_json
+
+
+@app.delete("/schedule/{id}")
+async def del_schedule(context: dict, db: Session = Depends(get_db)):
+    tg_id = str(context["tg_id"])
+    timer_id = int(context["timer_id"])
+    pill_id = int(context["pill_id"])
+
+    output_json = await get_user(context, db)
+
+    with engine.connect():
+        if output_json["in_database"] and output_json["user"]["is_active"]:
+            user = crud.get_user_by_tg(db, tg_id=tg_id)
+            sch = crud.get_schedule_element(db, sch_id=timer_id)
+            pill = crud.get_pill(db, pill_id=pill_id)
+            if sch is None:
+                output_json["text"] = "Указанного времени не существует"
+                return output_json
+            if user.id != sch.user_id:
+                output_json["text"] = "Вы не можете это сделать"
+                return output_json
+            output_json["text"] = f"Время {sch.timer} удалено из списка напоминаний для '{pill.pill_name}'"
+            crud.del_sch_timer(db, sch)
+
+    return output_json
 
 
 if __name__ == '__main__':

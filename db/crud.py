@@ -98,15 +98,32 @@ def add_sch_timer(db: Session, sch: schemas.SchCreate):
     return db_sch
 
 
-def get_schedule(db: Session, user_id: int):
-    output_dict = get_pills(db, user_id=user_id)
-    schedules = db.query(models.SchedulePills).filter(models.Pill.user_id == user_id).order_by(models.SchedulePills.timer.desc()).all()
-    for pill_id, _ in output_dict.items():
-        timers = [schedule.timer for schedule in schedules if schedule.pill_id == pill_id]
-        sort_timers = sorted(timers, key=lambda time: int(time.split(":")[0]))
-        output_dict[pill_id]["schedules"] = sort_timers
+def del_sch_timer(db: Session, sch: models.SchedulePills):
+    db.delete(sch)
+    db.commit()
+    return sch
 
-    return output_dict
+
+def get_schedule_element(db: Session, sch_id: int):
+    sch = db.query(models.SchedulePills).filter(models.SchedulePills.id == sch_id).first()
+    return sch if sch else None
+
+
+def get_schedule(db: Session, user_id: int):
+    pills_list = get_pills(db, user_id)
+    schedules = db.query(models.SchedulePills).filter(models.Pill.user_id == user_id).all()
+    for pill in pills_list:
+        timers = [
+            {
+                "id": schedule.id,
+                "timer": schedule.timer,
+                "timer_tz": schedule.timer+" добавка"
+            }
+            for schedule in schedules if schedule.pill_id == pill["id"]
+        ]
+        pill["timers"] = timers
+
+    return pills_list
 
 
 # def bool_schedule_timer(db: Session, sch_time: str):
