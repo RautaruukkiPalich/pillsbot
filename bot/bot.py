@@ -5,6 +5,7 @@ import json
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE
 from functions import create_markup, create_markup_pill
@@ -38,14 +39,34 @@ class EnterScheduleTime(StatesGroup):
     db_query = State()
 
 
+@dp.message_handler(state='*', commands='cancel')
+@dp.message_handler(Text(equals='cancel', ignore_case=True), state='*')
+async def cancel_handler(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    await state.finish()
+    await message.reply('Cancelled', reply_markup=None)
+
+#
+# @dp.message_handler(state='*')
+# @dp.message_handler(Text(equals='/', ignore_case=True), state='*')
+# async def cancel_handler(message: types.Message, state: FSMContext):
+#     current_state = await state.get_state()
+#     if current_state is None:
+#         return
+#     await state.finish()
+#     await message.reply('not available', reply_markup=None)
+
+
 @dp.message_handler(commands=['start'])
 async def start_bot(message: types.Message, state: FSMContext):
     url = f"{HOST_URL}/user"
 
-    data = dict()
-    data["tg_id"] = message.chat.id
+    context = dict()
+    context["tg_id"] = message.chat.id
 
-    request = requests.get(url, data=json.dumps(data))
+    request = requests.get(url, data=json.dumps(context))
     response = json.loads(request.text)
 
     if response["in_database"] and response["user"]["is_active"]:
@@ -59,7 +80,7 @@ async def start_bot(message: types.Message, state: FSMContext):
         memo["url"] = url
         memo["message"] = message
         memo["text_message"] = text_message
-        memo["data"] = data
+        memo["context"] = context
 
     await CreateUser.callback_timezone.set()
     await message.reply(text_message, reply_markup=markup)
@@ -72,13 +93,13 @@ async def start_bot(callback: types.CallbackQuery, state: FSMContext):
         url = memo["url"]
         text_message = memo["text_message"]
         message = memo["message"]
-        data = memo["data"]
+        context = memo["context"]
 
-    data["first_name"] = message.chat.first_name
-    data["last_name"] = message.chat.last_name
-    data["timezone"] = TIMEZONE[int(callback.data)].split()[0]
+    context["first_name"] = message.chat.first_name
+    context["last_name"] = message.chat.last_name
+    context["timezone"] = TIMEZONE[int(callback.data)].split()[0]
 
-    request = requests.post(url, data=json.dumps(data))
+    request = requests.post(url, data=json.dumps(context))
     response = json.loads(request.text)
 
     await state.finish()
@@ -89,9 +110,9 @@ async def start_bot(callback: types.CallbackQuery, state: FSMContext):
 @dp.message_handler(commands=['bye'])
 async def stop_bot(message: types.Message):
     url = f"{HOST_URL}/user"
-    data = {"tg_id": message.chat.id}
+    context = {"tg_id": message.chat.id}
 
-    request = requests.delete(url, data=json.dumps(data))
+    request = requests.delete(url, data=json.dumps(context))
     response = json.loads(request.text)
 
     await message.reply(f"{response['text']}")
@@ -101,52 +122,58 @@ async def stop_bot(message: types.Message):
 async def my_pills(message: types.Message):
     url = f"{HOST_URL}/pills"
     tg_id = str(message.chat.id)
-    data = {"tg_id": tg_id}
+    context = {"tg_id": tg_id}
 
-    request = requests.get(url, data=json.dumps(data))
+    request = requests.get(url, data=json.dumps(context))
     response = json.loads(request.text)
 
-    if response["in_db"] == "false":
-        await message.answer(response["message"])
+    if not response["in_database"] or not response["user"]["is_active"]:
+        await message.answer(response["text"])
         return
 
-    pills_list = "\n".join(f"• {val['name']}" for _, val in response["message"].items())
+    pills_list = "\n".join(
+        f"- {pill['name']}" for pill in response["pills"]
+    )
 
     await message.answer(f"Вот список твоих лекарств:\n\n{pills_list}")
 
 
 @dp.message_handler(commands=['addpill'])
-async def add_pill(message: types.Message, state: FSMContext):
+async def add_pill(message: types.Message):
+    url = f"{HOST_URL}/user"
+    tg_id = str(message.chat.id)
+    context = {"tg_id": tg_id}
+
+    request = requests.get(url, data=json.dumps(context))
+    response = json.loads(request.text)
+
+    if not response["in_database"] or not response["user"]["is_active"]:
+        await message.answer(response["text"])
+        return
 
     await AddPill.enter_pill_name.set()
     await message.reply(f"Напиши название лекарства, о котором я буду тебе напоминать.\n\n"
-                        f" Для отмены заполнения этого поля можно нажать /cancel")
+                        f"Для отмены заполнения этого поля можно нажать /cancel")
 
 
 @dp.message_handler(state=AddPill.enter_pill_name)
 async def enter_pill_name(message: types.Message, state: FSMContext):
 
     url = f"{HOST_URL}/pills"
-    data = dict()
+    context = dict()
 
     if message.text[0] == "/":
-        if message.text == "/cancel":
-            text = f"Отменил заполнение поля"
-            await state.finish()
-        else:
-            text = f"Некорректные данные"
-        await bot.send_message(message.chat.id, text)
+        await message.reply("Некорректные данные")
         return
 
-    tg_id = str(message.chat.id)
-    data["pill_name"] = str(message.text)
-    data["tg_id"] = tg_id
+    context["pill_name"] = str(message.text)
+    context["tg_id"] = str(message.chat.id)
 
-    request = requests.post(url, data=json.dumps(data))
+    request = requests.post(url, data=json.dumps(context))
     response = json.loads(request.text)
 
     await state.finish()
-    await bot.send_message(message.chat.id, f"{response['message']}")
+    await message.reply(f"{response['text']}")
 
 
 @dp.message_handler(commands=['delpill'])
@@ -154,18 +181,26 @@ async def del_pill(message: types.Message, state: FSMContext):
     url = f"{HOST_URL}/pills"
 
     tg_id = str(message.chat.id)
-    data = {"tg_id": tg_id}
-    text_message = f"Выбери название лекарства, о котором я больше не буду тебе напоминать"
+    context = {"tg_id": tg_id}
 
-    request = requests.get(url, data=json.dumps(data))
+    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
     response = json.loads(request.text)
 
-    markup = create_markup_pill(response["message"])
+    if not response["in_database"] or not response["user"]["is_active"]:
+        await message.answer(response["text"])
+        return
+
+    text_message = f"Выбери название лекарства, о котором я больше не буду тебе напоминать"
+
+    request = requests.get(url, data=json.dumps(context))
+    response = json.loads(request.text)
+
+    markup = create_markup_pill(response["pills"])
 
     async with state.proxy() as memo:
         memo['message'] = message
         memo['text_message'] = text_message
-        memo['tg_id'] = message.chat.id
+        memo['context'] = context
         memo['url'] = url
 
     await DelPill.callback_pill_id.set()
@@ -174,23 +209,23 @@ async def del_pill(message: types.Message, state: FSMContext):
 
 @dp.callback_query_handler(state=DelPill)
 async def text(callback: types.CallbackQuery, state: FSMContext):
+
     async with state.proxy() as memo:
-        pass
-    text_message = memo['text_message']
-    tg_id = memo['tg_id']
-    url = memo['url']
-    message = memo['message']
+        context = memo["context"]
+        text_message = memo['text_message']
+        url = memo['url']
+        message = memo['message']
 
     await callback.message.edit_text(text_message)
 
-    pill_id = str(callback.data)
-    data = {"tg_id": tg_id, "pill_id": pill_id}
+    pill_id = callback.data
+    context["pill_id"] = str(pill_id)
 
-    request = requests.delete(f"{url}/{pill_id}", data=json.dumps(data))
+    request = requests.delete(f"{url}/{pill_id}", data=json.dumps(context))
     response = json.loads(request.text)
 
     await state.finish()
-    await message.answer(f"{response['message']}" if request.status_code == 200 else f"Ошибка, попробуйте позже")
+    await message.answer(f"{response['text']}" if request.status_code == 200 else f"Ошибка, попробуйте позже")
 
 
 @dp.message_handler(commands=['editpill'])
@@ -198,15 +233,24 @@ async def edit_pill(message: types.Message, state: FSMContext):
     url = f"{HOST_URL}/pills"
 
     tg_id = str(message.chat.id)
-    data = {"tg_id": tg_id}
+    context = {"tg_id": tg_id}
     text_message = f"Выбери название лекарства, название которого вы хотите изменить"
 
-    request = requests.get(url, data=json.dumps(data))
+    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response = json.loads(request.text)
+
+    if not response["in_database"] or not response["user"]["is_active"]:
+        await message.answer(response["text"])
+        return
+
+    request = requests.get(url, data=json.dumps(context))
     response = json.loads(request.text)
 
     markup = create_markup_pill(response["message"])
 
     async with state.proxy() as memo:
+        memo['context'] = context
+        memo['url'] = url
         memo['message'] = message
         memo['text_message'] = text_message
 
@@ -217,10 +261,9 @@ async def edit_pill(message: types.Message, state: FSMContext):
 @dp.callback_query_handler(state=EditPillName.callback_pill_id)
 async def callback(callback: types.CallbackQuery, state: FSMContext):
     async with state.proxy() as memo:
-        memo['pill_id'] = callback.data
-
-    text_message = memo["text_message"]
-    message = memo['message']
+        memo['context']['pill_id'] = callback.data
+        text_message = memo["text_message"]
+        message = memo['message']
 
     await callback.message.edit_text(text_message)
     await EditPillName.enter_pill_name.set()
@@ -231,32 +274,21 @@ async def callback(callback: types.CallbackQuery, state: FSMContext):
 @dp.message_handler(state=EditPillName.enter_pill_name)
 async def edit_pill_name(message: types.Message, state: FSMContext):
 
-    url = f"{HOST_URL}/pills"
-    data = dict()
-
     if message.text[0] == "/":
-        if message.text == "/cancel":
-            text = f"Отменил заполнение поля"
-            await state.finish()
-        else:
-            text = f"Некорректные данные"
-        await bot.send_message(message.chat.id, text)
+        await bot.send_message(message.chat.id, "Некорректные данные")
         return
 
     async with state.proxy() as memo:
-        pass
+        context = memo["context"]
+        url = memo["url"]
 
-    data["pill_name"] = str(message.text)
-    data["pill_id"] = memo["pill_id"]
-    data["tg_id"] = str(message.chat.id)
+    context["pill_name"] = str(message.text)
 
-    request = requests.patch(f"{url}/{data['pill_id']}", data=json.dumps(data))
+    request = requests.patch(f"{url}/{context['pill_id']}", data=json.dumps(context))
     response = json.loads(request.text)
 
-    text = f"{response['message']}"
-
     await state.finish()
-    await bot.send_message(message.chat.id, text)
+    await bot.send_message(message.chat.id, f"{response['text']}")
 
 
 @dp.message_handler(commands=['add_schedule'])

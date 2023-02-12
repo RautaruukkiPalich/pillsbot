@@ -28,7 +28,7 @@ async def root():
 async def get_user(context: dict, db: Session = Depends(get_db)):
     """
     Get user info from DB\n
-    {'tg_id': str}
+    context: {'tg_id': str}
     """
 
     tg_id = str(context["tg_id"])
@@ -38,6 +38,9 @@ async def get_user(context: dict, db: Session = Depends(get_db)):
     with engine.connect():
         user = crud.get_user_by_tg(db, tg_id=tg_id)
         if user is not None:
+            output_json["text"] = "Пользователь уже существует в базе"
+            if not user.is_active:
+                output_json["text"] = "Пользователь удалён. Вы не можете это сделать"
             output_json["in_database"] = True
             output_json["user"]["id"] = user.id
             output_json["user"]["tg"] = user.tg_id
@@ -45,12 +48,11 @@ async def get_user(context: dict, db: Session = Depends(get_db)):
             output_json["user"]["surname"] = user.last_name
             output_json["user"]["is_active"] = user.is_active
             output_json["user"]["timezone"] = user.timezone
-            output_json["text"] = "Пользователь уже существует в базе"
-            return output_json
+        else:
+            output_json["in_database"] = False
+            output_json["user"]["is_active"] = False
+            output_json["text"] = "Пользователь не существует в базе"
 
-    output_json["in_database"] = False
-    output_json["user"]["is_active"] = False
-    output_json["text"] = "Пользователь не существует в базе"
     return output_json
 
 
@@ -74,13 +76,13 @@ async def create_user(context: dict, db: Session = Depends(get_db)):
         last_name = ""
 
     with engine.connect():
-        user_info = await get_user(context, db)
-        if user_info["in_database"]:
-            if not user_info["user"]["is_active"]:
+        output_json = await get_user(context, db)
+        if output_json["in_database"]:
+            if not output_json["user"]["is_active"]:
                 user = crud.get_user_by_tg(db, tg_id=tg_id)
                 crud.activate_user(db, user, timezone)
-                user_info["text"] = "Пользователь восстановлен"
-            return user_info
+                output_json["text"] = "Пользователь восстановлен"
+            return output_json
         else:
             await crud.create_user(db, schemas.UserCreate(
                 tg_id=tg_id,
@@ -88,10 +90,9 @@ async def create_user(context: dict, db: Session = Depends(get_db)):
                 last_name=last_name,
                 timezone=timezone,
             ))
-            user_info = await get_user(context, db)
-            user_info["text"] = "Пользователь успешно добавлен"
+            output_json["text"] = "Пользователь успешно добавлен"
 
-    return user_info
+    return output_json
 
 
 # , response_model=schemas.UserDelete)
@@ -104,109 +105,120 @@ async def delete_user(context: dict, db: Session = Depends(get_db)):
     tg_id = str(context["tg_id"])
 
     with engine.connect():
-        user_info = await get_user(context, db)
+        output_json = await get_user(context, db)
 
-        if not user_info["in_database"]:
-            user_info["text"] = "Пользователь не существует"
-            return user_info
+        if not output_json["in_database"]:
+            output_json["text"] = "Пользователь не существует"
+            return output_json
 
-        if not user_info["user"]["is_active"]:
-            user_info["text"] = "Пользователь уже удалён"
-            return user_info
+        if not output_json["user"]["is_active"]:
+            output_json["text"] = "Пользователь уже удалён"
+            return output_json
 
         user = crud.get_user_by_tg(db, tg_id=tg_id)
         crud.delete_user(db, user)
-        user_info["text"] = "Пользователь удалён"
+        output_json["text"] = "Пользователь удалён"
 
-    return user_info
+    return output_json
 
 
 @app.get("/pills")
-async def get_pill(data: dict, db: Session = Depends(get_db)):
+async def get_pill(context: dict, db: Session = Depends(get_db)):
     """
-    Add pill list from DB\n
-    data: {'tg_id': str}
+    Get pill list from DB\n
+    context: {'tg_id': str|int}
     """
-    tg_id = str(data["tg_id"])
+    tg_id = str(context["tg_id"])
+    output_json = await get_user(context, db)
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=tg_id)
-        if user and user.is_active:
-            list_pills = crud.get_pills(db, user_id=user.id)
+        if output_json["in_database"] and output_json["user"]["is_active"]:
+            user = crud.get_user_by_tg(db, tg_id=tg_id)
+            output_json["pills"] = crud.get_pills(db, user_id=user.id)
         else:
-            return {"in_db": "false", "message": "Пользователь не зарегистрирован"}
+            output_json["text"] = "Пользователь не зарегистрирован"
 
-    return {"in_db": "true", "message": list_pills}
+    return output_json
 
 
 @app.post("/pills")
-async def add_pill(data: dict, db: Session = Depends(get_db)):
+async def add_pill(context: dict, db: Session = Depends(get_db)):
     """
     Add pill to DB\n
-    data: {'tg_id': str, 'pill_name': str}
+    context: {'tg_id': str|int, 'pill_name': str}
     """
 
-    pill_name = str(data["pill_name"]).capitalize()
-    tg_id = str(data["tg_id"])
+    pill_name = str(context["pill_name"]).capitalize()
+    tg_id = str(context["tg_id"])
+    output_json = await get_user(context, db)
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=tg_id)
-        if user and user.is_active:
+        if output_json["in_database"] and output_json["user"]["is_active"]:
+            user = crud.get_user_by_tg(db, tg_id=tg_id)
             crud.create_pill(db, schemas.PillCreate(
                 pill_name=pill_name,
                 user_id=user.id,
             ))
-        else:
-            return {"message": "Пользователь не зарегистрирован"}
+            output_json["text"] = f"{pill_name} добавлен"
 
-    return {"message": f"{pill_name} добавлен"}
+    return output_json
 
 
 @app.patch("/pills/{id}")
-async def edit_pill(data: dict, db: Session = Depends(get_db)):
+async def edit_pill(context: dict, db: Session = Depends(get_db)):
     """
     Edit pill_name in DB\n
-    data: {'tg_id': str, 'pill_name': str, 'pill_id': str/int}
+    context: {'tg_id': str|int, 'pill_name': str, 'pill_id': str|int}
     """
 
-    tg_id = str(data["tg_id"])
-    pill_id = int(data["pill_id"])
-    pill_name = str(data["pill_name"]).capitalize()
+    tg_id = str(context["tg_id"])
+    pill_id = int(context["pill_id"])
+    pill_name = str(context["pill_name"]).capitalize()
+
+    output_json = await get_user(context, db)
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=tg_id)
-        pill = crud.get_pill_info(db, pill_id=pill_id)
+        if output_json["in_database"] and output_json["user"]["is_active"]:
+            user = crud.get_user_by_tg(db, tg_id=tg_id)
+            pill = crud.get_pill(db, pill_id=pill_id)
+            if not pill:
+                output_json["text"] = "Некорректные данные"
+                return output_json
+            if user.id != pill.user_id:
+                output_json["text"] = "Вы не можете это сделать"
+                return output_json
+            output_json["text"] = f"{pill_name}: название изменено"
+            crud.edit_pill_name(db, pill, pill_name)
 
-        if not user or not pill:
-            return {"message": "Вы не можете это сделать"}
-        if user.id != pill.user_id:
-            return {"message": "Это не ваше лекарство"}
-        crud.edit_pill_name(db, pill, pill_name)
-
-    return {"message": f"{pill_name}: название изменено"}
+    return output_json
 
 
 @app.delete("/pills/{id}")
-async def del_pill(data: dict, db: Session = Depends(get_db)):
+async def del_pill(context: dict, db: Session = Depends(get_db)):
     """
     Delete pill from DB\n
-    data: {'tg_id': str, 'pill_id': str/int}
+    context: {'tg_id': str|int, 'pill_id': str/int}
     """
 
-    tg_id = str(data["tg_id"])
-    pill_id = int(data["pill_id"])
+    tg_id = str(context["tg_id"])
+    pill_id = int(context["pill_id"])
+
+    output_json = await get_user(context, db)
 
     with engine.connect():
-        user = crud.get_user_by_tg(db, tg_id=tg_id)
-        pill = crud.get_pill_info(db, pill_id=pill_id)
-        pill_name = pill.pill_name
-        if not user or not pill:
-            return {"message": "Вы не можете это сделать"}
-        if user.id != pill.user_id:
-            return {"message": "Это не ваше лекарство"}
-        crud.del_pill(db, pill)
+        if output_json["in_database"] and output_json["user"]["is_active"]:
+            user = crud.get_user_by_tg(db, tg_id=tg_id)
+            pill = crud.get_pill(db, pill_id=pill_id)
+            if not pill:
+                output_json["text"] = "Некорректные данные"
+                return output_json
+            if user.id != pill.user_id:
+                output_json["text"] = "Вы не можете это сделать"
+                return output_json
+            output_json["text"] = f"{pill.pill_name} удалён из списка ваших лекарств"
+            crud.del_pill(db, pill)
 
-    return {"message": f"{pill_name} удалён из списка ваших лекарств"}
+    return output_json
 
 
 @app.get("/schedule")
@@ -231,7 +243,7 @@ async def post_schedule(data: dict, db: Session = Depends(get_db)):
 
     with engine.connect():
         user = crud.get_user_by_tg(db, tg_id=tg_id)
-        pill = crud.get_pill_info(db, pill_id=pill_id)
+        pill = crud.get_pill(db, pill_id=pill_id)
         if not user or not pill:
             return {"message": "Вы не можете это сделать"}
         if user.id != pill.user_id:

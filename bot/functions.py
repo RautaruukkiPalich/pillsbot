@@ -20,8 +20,8 @@ def create_markup_pill(parse_data):
     markup = types.InlineKeyboardMarkup(row_width=2)
     tmp = list()
 
-    for pos, (idx, val) in enumerate(parse_data.items()):
-        tmp.append(types.InlineKeyboardButton(val["name"], callback_data=idx))
+    for pos, pill in enumerate(parse_data):
+        tmp.append(types.InlineKeyboardButton(pill["name"], callback_data=pill["id"]))
         if pos % 2 or pos == len(parse_data) - 1:
             markup.row(*tmp)
             tmp = []

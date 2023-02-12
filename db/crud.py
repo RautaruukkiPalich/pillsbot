@@ -53,7 +53,7 @@ def create_pill(db: Session, pill: schemas.PillCreate):
     return db_pill
 
 
-def get_pill_info(db: Session, pill_id: int):
+def get_pill(db: Session, pill_id: int):
     """
     return:
     pill (object models.Pill)
@@ -63,9 +63,14 @@ def get_pill_info(db: Session, pill_id: int):
 
 
 def get_pills(db: Session, user_id: int):
-    pills = db.query(models.Pill).filter(models.Pill.user_id == user_id).order_by(models.Pill.pill_name.asc()).all()
-    output_dict = {pill.id: {"name": pill.pill_name} for pill in pills}
-    return output_dict
+    pills = db.query(models.Pill).filter(models.Pill.user_id == user_id).filter(models.Pill.is_active).order_by(models.Pill.pill_name.asc()).all()
+    output_list = [{
+        "id": pill.id,
+        "name": pill.pill_name,
+        "is_active": pill.is_active,
+        "timers": []}
+            for pill in pills]
+    return output_list
 
 
 def del_pill(db: Session, pill: models.Pill):

@@ -25,5 +25,5 @@ SAMPLE_JSON = {
             }
         ],
     "status": "",
-    "message": ""
+    "text": ""
 }
