@@ -8,22 +8,18 @@ SAMPLE_JSON = {
         "is_active": "",
         "timezone": ""
     },
-    "pills":
-        [
-            {
-                "id": "",
-                "name": "",
-                "is_active": "",
-                "timers": [
-                    {
-                        "id": "",
-                        "is_active": "",
-                        "timer": "",
-                        "timer_tz": ""
-                    }
-                ]
-            }
-        ],
+    "pills": [
+        {
+            "id": "",
+            "name": "",
+            "timers": [
+                {
+                    "id": "",
+                    "timer": "",
+                }
+            ]
+        }
+    ],
     "status": "",
     "text": ""
 }

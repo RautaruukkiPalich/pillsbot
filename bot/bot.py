@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import requests
 import json
+import aioschedule
 
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -8,7 +10,7 @@ from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import StatesGroup, State
 from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE
-from functions import create_markup, create_markup_pill, create_markup_timers
+from functions import create_markup, create_markup_pill
 
 
 bot = Bot(TOKEN)
@@ -52,16 +54,6 @@ async def cancel_handler(message: types.Message, state: FSMContext):
         return
     await state.finish()
     await message.reply('Cancelled', reply_markup=None)
-
-#
-# @dp.message_handler(state='*')
-# @dp.message_handler(Text(equals='/', ignore_case=True), state='*')
-# async def cancel_handler(message: types.Message, state: FSMContext):
-#     current_state = await state.get_state()
-#     if current_state is None:
-#         return
-#     await state.finish()
-#     await message.reply('not available', reply_markup=None)
 
 
 @dp.message_handler(commands=['start'])
@@ -230,7 +222,7 @@ async def text(callback: types.CallbackQuery, state: FSMContext):
     response = json.loads(request.text)
 
     await state.finish()
-    await message.answer(f"{response['text']}")# if request.status_code == 200 else f"Ошибка, попробуйте позже")
+    await message.answer(f"{response['text']}")
 
 
 @dp.message_handler(commands=['editpill'])
@@ -358,7 +350,6 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
 
     text_message = "Выберите подходящее время"
     time_period = int(callback.data)
-
 
     async with state.proxy() as memo:
         memo["time4zone"] = time_period
@@ -502,6 +493,27 @@ async def end():
     return
 
 
+async def send_reminders():
+    request = requests.get(f"{HOST_URL}/reminder")
+    response = json.loads(request.text)
+
+    for user in response:
+        pill_mess = ', '.join([pills["name"] for pills in user["pills"]])
+        await bot.send_message(int(user["user"]["tg"]), f"Прими лекарства\n\n{pill_mess}")
+
+
+async def scheduler():
+    aioschedule.every().hour.at(":30").do(send_reminders)
+    aioschedule.every().hour.at(":00").do(send_reminders)
+    while True:
+        await aioschedule.run_pending()
+        await asyncio.sleep(10)
+
+
+async def on_startup(_):
+    asyncio.create_task(scheduler())
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)

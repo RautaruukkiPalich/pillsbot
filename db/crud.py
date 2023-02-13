@@ -35,6 +35,10 @@ def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
 
 
+def get_users(db: Session):
+    return db.query(models.User).filter(models.User.is_active == True).all()
+
+
 def get_user_by_tg(db: Session, tg_id: str):
     user = db.query(models.User).filter(models.User.tg_id == tg_id).first()
     if user:
@@ -67,10 +71,23 @@ def get_pills(db: Session, user_id: int):
     output_list = [{
         "id": pill.id,
         "name": pill.pill_name,
-        "is_active": pill.is_active,
         "timers": []}
             for pill in pills]
     return output_list
+
+
+def get_pills_by_time(db: Session, user: models.User, timer: str):
+    sch_pills = db.query(models.SchedulePills).filter(models.SchedulePills.user_id == user.id).filter(models.SchedulePills.timer == timer).all()
+    list_sch_id = (sch.pill_id for sch in sch_pills)
+    pills = db.query(models.Pill).filter(models.Pill.id.in_(list_sch_id)).all()
+    print(pills)
+    output_list = [{
+        "id": pill.id,
+        "name": pill.pill_name,
+        "timers": []}
+            for pill in pills]
+    return output_list
+    #return pills
 
 
 def del_pill(db: Session, pill: models.Pill):
@@ -116,8 +133,7 @@ def get_schedule(db: Session, user_id: int):
         timers = [
             {
                 "id": schedule.id,
-                "timer": schedule.timer,
-                "timer_tz": schedule.timer+" добавка"
+                "timer": schedule.timer
             }
             for schedule in schedules if schedule.pill_id == pill["id"]
         ]

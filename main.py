@@ -1,13 +1,17 @@
+import datetime
 import uvicorn
 
 from fastapi import FastAPI, Depends
+from fastapi_utils.tasks import repeat_every
 from sqlalchemy.orm import Session
-from db import crud, models, schemas
+from db import crud, schemas
 from db.database import SessionLocal, engine
 from samples.json import SAMPLE_JSON
 from copy import deepcopy
+from datetime import datetime
+from pytz import timezone
 
-
+tz = timezone('Europe/Moscow')
 app = FastAPI()
 
 
@@ -291,6 +295,29 @@ async def del_schedule(context: dict, db: Session = Depends(get_db)):
             crud.del_sch_timer(db, sch)
 
     return output_json
+
+
+@app.get("/reminder")
+async def get_reminds(db: Session = Depends(get_db)):
+    now = datetime.now(tz)
+    if now.minute not in [0, 30]:
+       return "Ты шо тут забыл?"
+
+    with engine.connect():
+        output_list = []
+        users = crud.get_users(db)
+        minute = now.minute
+        for user in users:
+            hour = ((now.hour+int(user.timezone))+24) % 24
+            timer = f"{hour}:{minute}"
+            list_pills = crud.get_pills_by_time(db, user, timer)
+            if not list_pills:
+                continue
+            user_info = await get_user({"tg_id": user.tg_id}, db)
+            user_info["pills"] = list_pills
+            output_list.append(user_info)
+
+    return output_list
 
 
 if __name__ == '__main__':
