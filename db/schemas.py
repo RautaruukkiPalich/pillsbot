@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -38,7 +38,6 @@ class User(UserBase):
     tz: int
     created_on: datetime
     updated_on: datetime
-    pills: list[Pill] = []
 
     class Config:
         orm_mode = True
@@ -61,5 +60,3 @@ class Sch(SchBase):
 
     class Config:
         orm_mode = True
-
-
