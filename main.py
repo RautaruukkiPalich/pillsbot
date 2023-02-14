@@ -1,17 +1,17 @@
 import datetime
 import uvicorn
 
+from config import HOST_ADD, HOST_PORT
 from fastapi import FastAPI, Depends
-from fastapi_utils.tasks import repeat_every
 from sqlalchemy.orm import Session
 from db import crud, schemas
 from db.database import SessionLocal, engine
 from samples.json import SAMPLE_JSON
 from copy import deepcopy
 from datetime import datetime
-from pytz import timezone
+from pytz import timezone as tzone
 
-tz = timezone('Europe/Moscow')
+tz = tzone('Europe/Moscow')
 app = FastAPI()
 
 
@@ -94,12 +94,12 @@ async def create_user(context: dict, db: Session = Depends(get_db)):
                 last_name=last_name,
                 timezone=timezone,
             ))
-            output_json["text"] = "Пользователь успешно добавлен"
 
+    output_json["text"] = "Пользователь успешно добавлен"
     return output_json
 
 
-# , response_model=schemas.UserDelete)
+# response_model=schemas.UserDelete)
 @app.delete("/user")
 async def delete_user(context: dict, db: Session = Depends(get_db)):
     """
@@ -138,7 +138,7 @@ async def get_pill(context: dict, db: Session = Depends(get_db)):
     with engine.connect():
         if output_json["in_database"] and output_json["user"]["is_active"]:
             user = crud.get_user_by_tg(db, tg_id=tg_id)
-            output_json["pills"] = crud.get_pills(db, user_id=user.id)
+            output_json["pills"] = crud.get_pills(db, user)
         else:
             output_json["text"] = "Пользователь не зарегистрирован"
 
@@ -227,19 +227,28 @@ async def del_pill(context: dict, db: Session = Depends(get_db)):
 
 @app.get("/schedule")
 async def get_schedule(context: dict, db: Session = Depends(get_db)):
+    """
+    Get list pills and schedules from DB\n
+    context: {'tg_id': str|int}
+    """
     tg_id = str(context["tg_id"])
     output_json = await get_user(context, db)
 
     with engine.connect():
         if output_json["in_database"] and output_json["user"]["is_active"]:
             user = crud.get_user_by_tg(db, tg_id=tg_id)
-            output_json["pills"] = crud.get_schedule(db, user.id)
+            output_json["pills"] = crud.get_schedule(db, user)
 
     return output_json
 
 
 @app.post("/schedule")
 async def post_schedule(context: dict, db: Session = Depends(get_db)):
+    """
+    Add schedule to pill in DB\n
+    context: {'tg_id': str|int, 'pill_id': str|int, 'timer':str} \n
+    timer must be a multiple of 30 like '0:30' / '8:00' / 13:30 / 21:00
+    """
     tg_id = str(context["tg_id"])
     pill_id = int(context["pill_id"])
     timer = str(context["timer"])
@@ -253,7 +262,7 @@ async def post_schedule(context: dict, db: Session = Depends(get_db)):
                 output_json["text"] = "Это не ваше лекарство"
                 return output_json
 
-            list_schedule = crud.get_schedule(db, user.id)
+            list_schedule = crud.get_schedule(db, user)
 
             for pill_elem in list_schedule:
                 if pill_elem["id"] == pill_id:
@@ -274,6 +283,10 @@ async def post_schedule(context: dict, db: Session = Depends(get_db)):
 
 @app.delete("/schedule/{id}")
 async def del_schedule(context: dict, db: Session = Depends(get_db)):
+    """
+    Del pill's schedule from DB\n
+    context: {'tg_id': str|int, timer_id: str|int, pill_id: str|int}
+    """
     tg_id = str(context["tg_id"])
     timer_id = int(context["timer_id"])
     pill_id = int(context["pill_id"])
@@ -299,9 +312,14 @@ async def del_schedule(context: dict, db: Session = Depends(get_db)):
 
 @app.get("/reminder")
 async def get_reminds(db: Session = Depends(get_db)):
+    """
+    Get list pills and schedules from DB\n
+    This operation is scheduled and called by the bot
+    return json containing information about reminders at the time of the request
+    """
     now = datetime.now(tz)
     if now.minute not in [0, 30]:
-       return "Ты шо тут забыл?"
+        return {"text": "Ты шо тут забыл?"}
 
     with engine.connect():
         output_list = []
@@ -309,7 +327,7 @@ async def get_reminds(db: Session = Depends(get_db)):
         minute = now.minute
         for user in users:
             hour = ((now.hour+int(user.timezone))+24) % 24
-            timer = f"{hour}:{minute}"
+            timer = f"{hour}:{minute:02}"
             list_pills = crud.get_pills_by_time(db, user, timer)
             if not list_pills:
                 continue
@@ -321,4 +339,8 @@ async def get_reminds(db: Session = Depends(get_db)):
 
 
 if __name__ == '__main__':
-    uvicorn.run("__main__:app", host='localhost', port=8000, reload=True)
+    uvicorn.run("__main__:app",
+                host=HOST_ADD,
+                port=int(HOST_PORT),
+                reload=True
+                )
