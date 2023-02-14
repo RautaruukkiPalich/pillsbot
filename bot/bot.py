@@ -12,7 +12,6 @@ from aiogram.dispatcher.filters.state import StatesGroup, State
 from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE
 from functions import create_markup, create_markup_pill
 
-
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
 
@@ -63,11 +62,11 @@ async def start_bot(message: types.Message, state: FSMContext):
     context = dict()
     context["tg_id"] = message.chat.id
 
-    request = requests.get(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if response["in_database"] and response["user"]["is_active"]:
-        await message.reply(response["text"])
+    if response_text["in_database"] and response_text["user"]["is_active"]:
+        await message.reply(response_text["text"])
         return
 
     markup = create_markup(TIMEZONE)
@@ -96,12 +95,12 @@ async def start_bot(callback: types.CallbackQuery, state: FSMContext):
     context["last_name"] = message.chat.last_name
     context["timezone"] = TIMEZONE[int(callback.data)].split()[0]
 
-    request = requests.post(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.post(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
     await state.finish()
     await callback.message.edit_text(text_message, reply_markup=None)
-    await bot.send_message(message.chat.id, f"{response['text']}")
+    await bot.send_message(message.chat.id, f"{response_text['text']}")
 
 
 @dp.message_handler(commands=['bye'])
@@ -109,10 +108,10 @@ async def stop_bot(message: types.Message):
     url = f"{HOST_URL}/user"
     context = {"tg_id": message.chat.id}
 
-    request = requests.delete(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.delete(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    await message.reply(f"{response['text']}")
+    await message.reply(f"{response_text['text']}")
 
 
 @dp.message_handler(commands=['mypills'])
@@ -121,15 +120,15 @@ async def my_pills(message: types.Message):
     tg_id = str(message.chat.id)
     context = {"tg_id": tg_id}
 
-    request = requests.get(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response["user"]["is_active"]:
-        await message.answer(response["text"])
+    if not response_text["in_database"] or not response_text["user"]["is_active"]:
+        await message.answer(response_text["text"])
         return
 
     pills_list = "\n".join(
-        f"- {pill['name']}" for pill in response["pills"]
+        f"{pill['name']}" for pill in response_text["pills"]
     )
 
     await message.answer(f"Вот список твоих лекарств:\n\n{pills_list}")
@@ -141,11 +140,11 @@ async def add_pill(message: types.Message):
     tg_id = str(message.chat.id)
     context = {"tg_id": tg_id}
 
-    request = requests.get(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response["user"]["is_active"]:
-        await message.answer(response["text"])
+    if not response_text["in_database"] or not response_text["user"]["is_active"]:
+        await message.answer(response_text["text"])
         return
 
     await AddPill.enter_pill_name.set()
@@ -166,11 +165,11 @@ async def enter_pill_name(message: types.Message, state: FSMContext):
     context["pill_name"] = str(message.text)
     context["tg_id"] = str(message.chat.id)
 
-    request = requests.post(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.post(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
     await state.finish()
-    await message.reply(f"{response['text']}")
+    await message.reply(f"{response_text['text']}")
 
 
 @dp.message_handler(commands=['delpill'])
@@ -180,19 +179,19 @@ async def del_pill(message: types.Message, state: FSMContext):
     tg_id = str(message.chat.id)
     context = {"tg_id": tg_id}
 
-    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response["user"]["is_active"]:
-        await message.answer(response["text"])
+    if not response_text["in_database"] or not response_text["user"]["is_active"]:
+        await message.answer(response_text["text"])
         return
 
     text_message = f"Выбери название лекарства, о котором я больше не буду тебе напоминать"
 
-    request = requests.get(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    markup = create_markup_pill(response["pills"])
+    markup = create_markup_pill(response_text["pills"])
 
     async with state.proxy() as memo:
         memo['message'] = message
@@ -218,11 +217,11 @@ async def text(callback: types.CallbackQuery, state: FSMContext):
     pill_id = callback.data
     context["pill_id"] = str(pill_id)
 
-    request = requests.delete(f"{url}/{pill_id}", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.delete(f"{url}/{pill_id}", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
     await state.finish()
-    await message.answer(f"{response['text']}")
+    await message.answer(f"{response_text['text']}")
 
 
 @dp.message_handler(commands=['editpill'])
@@ -233,17 +232,17 @@ async def edit_pill(message: types.Message, state: FSMContext):
     context = {"tg_id": tg_id}
     text_message = f"Выбери название лекарства, название которого вы хотите изменить"
 
-    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response["user"]["is_active"]:
-        await message.answer(response["text"])
+    if not response["in_database"] or not response_text["user"]["is_active"]:
+        await message.answer(response_text["text"])
         return
 
-    request = requests.get(url, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    markup = create_markup_pill(response["pills"])
+    markup = create_markup_pill(response_text["pills"])
 
     async with state.proxy() as memo:
         memo['context'] = context
@@ -281,11 +280,11 @@ async def edit_pill_name(message: types.Message, state: FSMContext):
 
     context["pill_name"] = str(message.text)
 
-    request = requests.patch(f"{url}/{context['pill_id']}", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.patch(f"{url}/{context['pill_id']}", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
     await state.finish()
-    await bot.send_message(message.chat.id, f"{response['text']}")
+    await bot.send_message(message.chat.id, f"{response_text['text']}")
 
 
 @dp.message_handler(commands=['add_schedule'])
@@ -297,11 +296,11 @@ async def new_schedule(message: types.Message, state: FSMContext):
     tg_id = str(message.chat.id)
     context = {"tg_id": tg_id}
 
-    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response["user"]["is_active"]:
-        await message.answer(response["text"])
+    if not response_text["in_database"] or not response_text["user"]["is_active"]:
+        await message.answer(response_text["text"])
         return
 
     async with state.proxy() as memo:
@@ -311,10 +310,10 @@ async def new_schedule(message: types.Message, state: FSMContext):
         memo["message"] = message
         memo["text_message"] = text_message
 
-    request = requests.get(url_pill, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url_pill, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    markup = create_markup_pill(response["pills"])
+    markup = create_markup_pill(response_text["pills"])
 
     await EnterScheduleTime.callback_time4zone.set()
     await message.reply(text_message, reply_markup=markup)
@@ -375,11 +374,11 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     time_select = int(callback.data)
     context["timer"] = TIME_SELECT[time4zone][time_select]
 
-    request = requests.post(f"{url_sched}", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.post(f"{url_sched}", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
     await state.finish()
-    await message.reply(response["text"])
+    await message.reply(response_text["text"])
 
 
 @dp.message_handler(commands=['schedule'])
@@ -389,17 +388,17 @@ async def schedule(message: types.Message):
     tg_id = str(message.chat.id)
     context = {"tg_id": tg_id}
 
-    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response["user"]["is_active"]:
-        await message.answer(response["text"])
+    if not response_text["in_database"] or not response_text["user"]["is_active"]:
+        await message.answer(response_text["text"])
         return
 
-    request = requests.get(url_sched, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url_sched, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    for pill in response["pills"]:
+    for pill in response_text["pills"]:
         timers = [timer["timer"] for timer in pill['timers']]
         timers = sorted(timers, key=lambda time: int(time.replace(":", "")))
         text_message += f"\n{pill['name']}\n{', '.join(timers)}\n"
@@ -416,15 +415,15 @@ async def del_schedule(message: types.Message, state: FSMContext):
     tg_id = str(message.chat.id)
     context = {"tg_id": tg_id}
 
-    request = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response["user"]["is_active"]:
-        await message.answer(response["text"])
+    if not response_text["in_database"] or not response_text["user"]["is_active"]:
+        await message.answer(response_text["text"])
         return
 
-    request = requests.get(url_sched, data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.get(url_sched, data=json.dumps(context))
+    response_text = json.loads(response.text)
 
     async with state.proxy() as memo:
         memo["context"] = context
@@ -434,7 +433,7 @@ async def del_schedule(message: types.Message, state: FSMContext):
         memo["text_message"] = text_message
         memo["data"] = response
 
-    markup = create_markup_pill(response["pills"])
+    markup = create_markup_pill(response_text["pills"])
 
     await DelScheduleTime.callback_pill_id.set()
     await message.reply(text_message, reply_markup=markup)
@@ -481,25 +480,20 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     timer_id = int(callback.data)
     context["timer_id"] = timer_id
 
-    request = requests.delete(f"{url_sched}/{timer_id}", data=json.dumps(context))
-    response = json.loads(request.text)
+    response = requests.delete(f"{url_sched}/{timer_id}", data=json.dumps(context))
+    response_text = json.loads(response.text)
 
     await state.finish()
-    await message.reply(response["text"])
-
-
-@dp.message_handler(commands=['end'])
-async def end():
-    return
+    await message.reply(response_text["text"])
 
 
 async def send_reminders():
-    request = requests.get(f"{HOST_URL}/reminder")
-    response = json.loads(request.text)
+    response = requests.get(f"{HOST_URL}/reminder")
+    response_text = json.loads(response.text)
 
-    for user in response:
-        pill_mess = ', '.join([pills["name"] for pills in user["pills"]])
-        await bot.send_message(int(user["user"]["tg"]), f"Прими лекарства\n\n{pill_mess}")
+    for user in response_text:
+        pill_mess = '\n'.join([f'{pill["name"]}' for pill in user["pills"]])
+        await bot.send_message(int(user["user"]["tg"]), f"Прими лекарства:\n\n{pill_mess}")
 
 
 async def scheduler():
@@ -516,4 +510,8 @@ async def on_startup(_):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+    executor.start_polling(
+        dp,
+        skip_updates=True,
+        on_startup=on_startup
+    )
