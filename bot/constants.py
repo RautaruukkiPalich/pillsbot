@@ -1,9 +1,11 @@
 import os
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
 
-load_dotenv(find_dotenv())
+load_dotenv()
 
-HOST_URL = os.environ.get("HOST_URL")
+HOST_ADD = os.environ.get("HOST_ADD")
+HOST_PORT = os.environ.get("HOST_PORT")
+HOST_URL = f"http://{HOST_ADD}:{HOST_PORT}"
 TOKEN = os.environ.get("TG_TOKEN")
 TIME_4ZONE = {
     1: "0:00 - 5:30",
