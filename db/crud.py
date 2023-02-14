@@ -31,16 +31,20 @@ def activate_user(db: Session, user: models.User, timezone):
     return user
 
 
-def get_user(db: Session, user_id: int):
-    return db.query(models.User).filter(models.User.id == user_id).first()
-
-
 def get_users(db: Session):
-    return db.query(models.User).filter(models.User.is_active == True).all()
+    return db.query(
+        models.User
+    ).filter(
+        models.User.is_active
+    ).all()
 
 
 def get_user_by_tg(db: Session, tg_id: str):
-    user = db.query(models.User).filter(models.User.tg_id == tg_id).first()
+    user = db.query(
+        models.User
+    ).filter(
+        models.User.tg_id == tg_id
+    ).first()
     if user:
         return user
     return None
@@ -58,36 +62,50 @@ def create_pill(db: Session, pill: schemas.PillCreate):
 
 
 def get_pill(db: Session, pill_id: int):
-    """
-    return:
-    pill (object models.Pill)
-    """
-    pill = db.query(models.Pill).filter(models.Pill.id == pill_id).first()
+    pill = db.query(
+        models.Pill
+    ).filter(
+        models.Pill.id == pill_id
+    ).first()
     return pill if pill else None
 
 
-def get_pills(db: Session, user_id: int):
-    pills = db.query(models.Pill).filter(models.Pill.user_id == user_id).filter(models.Pill.is_active).order_by(models.Pill.pill_name.asc()).all()
-    output_list = [{
-        "id": pill.id,
-        "name": pill.pill_name,
-        "timers": []}
-            for pill in pills]
+def get_pills(db: Session, user: models.User):
+    pills = db.query(
+        models.Pill
+    ).filter(
+        models.Pill.user == user
+    ).order_by(
+        models.Pill.pill_name.asc()
+    ).all()
+    output_list = [
+        {
+            "id": pill.id,
+            "name": pill.pill_name,
+            "timers": []
+        }
+        for pill in pills
+    ]
     return output_list
 
 
 def get_pills_by_time(db: Session, user: models.User, timer: str):
-    sch_pills = db.query(models.SchedulePills).filter(models.SchedulePills.user_id == user.id).filter(models.SchedulePills.timer == timer).all()
-    list_sch_id = (sch.pill_id for sch in sch_pills)
-    pills = db.query(models.Pill).filter(models.Pill.id.in_(list_sch_id)).all()
-    print(pills)
-    output_list = [{
-        "id": pill.id,
-        "name": pill.pill_name,
-        "timers": []}
-            for pill in pills]
+    sch = db.query(
+        models.SchedulePills
+    ).join(
+        models.SchedulePills.pill
+    ).filter(
+        models.Pill.user == user,
+        models.SchedulePills.timer == timer
+    ).all()
+    output_list = [
+        {
+            "id": elem.pill_id,
+            "name": elem.pill.pill_name
+        }
+        for elem in sch
+    ]
     return output_list
-    #return pills
 
 
 def del_pill(db: Session, pill: models.Pill):
@@ -122,13 +140,21 @@ def del_sch_timer(db: Session, sch: models.SchedulePills):
 
 
 def get_schedule_element(db: Session, sch_id: int):
-    sch = db.query(models.SchedulePills).filter(models.SchedulePills.id == sch_id).first()
+    sch = db.query(
+        models.SchedulePills
+    ).filter(
+        models.SchedulePills.id == sch_id
+    ).first()
     return sch if sch else None
 
 
-def get_schedule(db: Session, user_id: int):
-    pills_list = get_pills(db, user_id)
-    schedules = db.query(models.SchedulePills).filter(models.Pill.user_id == user_id).all()
+def get_schedule(db: Session, user: models.User):
+    pills_list = get_pills(db, user)
+    schedules = db.query(
+        models.SchedulePills
+    ).filter(
+        models.SchedulePills.user == user
+    ).all()
     for pill in pills_list:
         timers = [
             {
@@ -140,9 +166,3 @@ def get_schedule(db: Session, user_id: int):
         pill["timers"] = timers
 
     return pills_list
-
-
-# def bool_schedule_timer(db: Session, sch_time: str):
-#     timer = db.query(models.SchedulePills).filter(models.SchedulePills.timer == sch_time).all()
-#     return True if timer else False
-
