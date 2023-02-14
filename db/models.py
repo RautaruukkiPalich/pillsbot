@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, DateTime, PrimaryKeyConstraint, UniqueConstraint, ForeignKey, Boolean, MetaData
+from sqlalchemy import Column, Integer, String, DateTime, PrimaryKeyConstraint, UniqueConstraint, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -19,8 +19,8 @@ class User(Base):
     created_on = Column(DateTime(), default=datetime.now)
     updated_on = Column(DateTime(), default=datetime.now, onupdate=datetime.now)
 
-    #pills = relationship("Pills", backref="users")
-    #timedelta = relationship("Timedelta", back_populates="owner")
+    pill = relationship("Pill", back_populates="user")
+    schedule = relationship("SchedulePills", back_populates="user")
 
     __table_args__ = (
         PrimaryKeyConstraint('id', name='user_id'),
@@ -38,7 +38,8 @@ class Pill(Base):
     created_on = Column(DateTime(), default=datetime.now)
     updated_on = Column(DateTime(), default=datetime.now, onupdate=datetime.now)
 
-    #users = relationship("User", backref="pills")
+    user = relationship("User", back_populates="pill")
+    schedule = relationship("SchedulePills", back_populates="pill")
 
     __table_args__ = (
         PrimaryKeyConstraint('id', name='pill_id'),
@@ -54,6 +55,9 @@ class SchedulePills(Base):
     pill_id = Column(Integer, ForeignKey("pills.id"))
     created_on = Column(DateTime(), default=datetime.now)
     updated_on = Column(DateTime(), default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="schedule")
+    pill = relationship("Pill", back_populates="schedule")
 
     __table_args__ = (
         PrimaryKeyConstraint('id', name='schedulepill_id'),
