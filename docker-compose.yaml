@@ -1,50 +1,59 @@
-version: '3.9'
+version: '3.6'
 
 services:
   database:
-    container_name: postgreSQL
-    image: postgres:latest
+    container_name: postgres_container
+    image: postgres
     environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASS}
-      - POSTGRES_DB=${DB_NAME}
-    expose:
-      - "5432"
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-changeme}
     ports:
-      - "${DB_PORT}:5432"
+      - "${DB_PORT:-5432}:5432"
     restart: always
     volumes:
-      - postgresql-data:/var/lib/postgresql/data
+      - postgres:/data/postgres
+    networks:
+      - postgres
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    links:
+      - database
+    restart: always
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+    networks:
+      - postgres
 
   web:
-    container_name: fastAPI
+    container_name: fastAPI_container
     build: .
-    command: "alembic upgrade head && uvicorn main:app --host ${HOST_ADD} --reload"
+    command: uvicorn main:app --host ${HOST_ADD} --reload
+    #command: "alembic upgrade head && uvicorn main:app --host ${HOST_ADD} --reload"
     volumes:
       - .:/app
     ports:
-      - "${HOST_PORT}:8000"
-    expose:
-      - "8000"
-    links:
-      - database
+      - "${HOST_PORT:-8000}:8000"
+    #links:
+    #  - database
     restart: always
-
-  pgadmin:
-    container_name: pgadmin
-    image: dpage/pgadmin4
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@admin.admin
-      - PGADMIN_DEFAULT_PASSWORD=admin
-    ports:
-      - "5050:80"
-    links:
-      - database
-
+    networks:
+      - postgres
 
 volumes:
-  postgresql-data:
+    postgres:
+    pgadmin:
 
+networks:
+  postgres:
+    driver: bridge
 
 #  tg_bot:
 #    container_name: bot
