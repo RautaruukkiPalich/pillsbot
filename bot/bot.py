@@ -487,6 +487,11 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     await message.reply(response_text["text"])
 
 
+@dp.message_handler(content_types="text")
+async def text(message: types.Message):
+    await message.answer("я не умею работать с текстом. используйте команды")
+
+
 async def send_reminders():
     response = requests.get(f"{HOST_URL}/reminder")
     response_text = json.loads(response.text)
@@ -509,7 +514,10 @@ async def on_startup(_):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        filename="bot.log"
+        )
     executor.start_polling(
         dp,
         skip_updates=True,
