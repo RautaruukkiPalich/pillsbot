@@ -1,0 +1,63 @@
+version: '3.9'
+
+services:
+  database:
+    container_name: postgreSQL
+    image: postgres:latest
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASS}
+      - POSTGRES_DB=${DB_NAME}
+    expose:
+      - "5432"
+    ports:
+      - "${DB_PORT}:5432"
+    restart: always
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+
+  web:
+    container_name: fastAPI
+    build: .
+    command: "alembic upgrade head && uvicorn main:app --host ${HOST_ADD} --reload"
+    volumes:
+      - .:/app
+    ports:
+      - "${HOST_PORT}:8000"
+    expose:
+      - "8000"
+    links:
+      - database
+    restart: always
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.admin
+      - PGADMIN_DEFAULT_PASSWORD=admin
+    ports:
+      - "5050:80"
+    links:
+      - database
+
+
+volumes:
+  postgresql-data:
+
+
+#  tg_bot:
+#    container_name: bot
+#    image: app-image
+#    hostname: bot
+#    restart: on-failure
+#    command: python3 bot/bot.py
+#    depends_on:
+#      - postgres
+#    links:
+#      - postgres
+#    networks:
+#      - main
+#    ports:
+#      - "443:443"
+
