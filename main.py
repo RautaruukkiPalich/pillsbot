@@ -1,4 +1,5 @@
 import datetime
+import logging
 import uvicorn
 
 from config import HOST_ADD, HOST_PORT
@@ -13,6 +14,11 @@ from pytz import timezone as tzone
 
 tz = tzone('Europe/Moscow')
 app = FastAPI()
+
+logging.basicConfig(
+    level=logging.WARNING,
+    filename="fastapi.log"
+)
 
 
 def get_db():
@@ -338,9 +344,11 @@ async def get_reminds(db: Session = Depends(get_db)):
     return output_list
 
 
-if __name__ == '__main__':
-    uvicorn.run("__main__:app",
-                host=HOST_ADD,
-                port=int(HOST_PORT),
-                reload=True
-                )
+# if __name__ == '__main__':
+#
+#     uvicorn.run(
+#         "__main__:app",
+#         host=HOST_ADD,
+#         port=int(HOST_PORT),
+#         reload=True
+#         )
