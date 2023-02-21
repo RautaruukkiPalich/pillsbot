@@ -1,8 +1,6 @@
 import datetime
 import logging
-import uvicorn
 
-from config import HOST_ADD, HOST_PORT
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from db import crud, schemas
@@ -94,7 +92,7 @@ async def create_user(context: dict, db: Session = Depends(get_db)):
                 output_json["text"] = "Пользователь восстановлен"
             return output_json
         else:
-            await crud.create_user(db, schemas.UserCreate(
+            crud.create_user(db, schemas.UserCreate(
                 tg_id=tg_id,
                 first_name=first_name,
                 last_name=last_name,
@@ -344,11 +342,11 @@ async def get_reminds(db: Session = Depends(get_db)):
     return output_list
 
 
-# if __name__ == '__main__':
-#
-#     uvicorn.run(
-#         "__main__:app",
-#         host=HOST_ADD,
-#         port=int(HOST_PORT),
-#         reload=True
-#         )
+if __name__ == '__main__':
+    pass
+    # uvicorn.run(
+    #     "__main__:app",
+    #     host=HOST_ADD,
+    #     port=int(HOST_PORT),
+    #     reload=True
+    #     )
