@@ -5,8 +5,9 @@ services:
     container_name: postgres_container
     image: postgres
     environment:
+      POSTGRES_DB: ${DB_NAME:-postgres}
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASS:-changeme}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
     ports:
       - "${DB_PORT:-5432}:5432"
     restart: always
@@ -19,8 +20,8 @@ services:
     container_name: pgadmin_container
     image: dpage/pgadmin4
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-pgadmin4@pgadmin.org}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+#      PGADMIN_DEFAULT_USER: ${PGADMIN_EMAIL:-pgadmin4@pgadmin.org}
+#      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:
       - "${PGADMIN_PORT:-5050}:80"
@@ -35,17 +36,33 @@ services:
   web:
     container_name: fastAPI_container
     build: .
-    command: uvicorn main:app --host ${HOST_ADD} --reload
-    #command: "alembic upgrade head && uvicorn main:app --host ${HOST_ADD} --reload"
+    command: uvicorn main:app --host ${HOST_ADD:-0.0.0.0} --port ${HOST_PORT:-8000} --reload
     volumes:
       - .:/app
     ports:
       - "${HOST_PORT:-8000}:8000"
-    #links:
-    #  - database
+    links:
+      - database
     restart: always
     networks:
       - postgres
+
+#  tg_bot:
+#    container_name: bot_container
+#    command: python3 bot/bot.py
+#    environment:
+#      - ${TG_TOKEN:-change_me}
+#    ports:
+#      - "443:443"
+#    volumes:
+#      - bot:/usr/src/app/bot
+#    links:
+#      - postgres
+#      - web
+#    restart:
+#      - always
+#    networks:
+#      - postgres
 
 volumes:
     postgres:
@@ -54,19 +71,3 @@ volumes:
 networks:
   postgres:
     driver: bridge
-
-#  tg_bot:
-#    container_name: bot
-#    image: app-image
-#    hostname: bot
-#    restart: on-failure
-#    command: python3 bot/bot.py
-#    depends_on:
-#      - postgres
-#    links:
-#      - postgres
-#    networks:
-#      - main
-#    ports:
-#      - "443:443"
-
