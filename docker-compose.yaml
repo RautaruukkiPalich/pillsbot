@@ -47,26 +47,26 @@ services:
     networks:
       - postgres
 
-#  tg_bot:
-#    container_name: bot_container
-#    command: python3 bot/bot.py
-#    environment:
-#      - ${TG_TOKEN:-change_me}
-#    ports:
-#      - "443:443"
-#    volumes:
-#      - bot:/usr/src/app/bot
-#    links:
-#      - postgres
-#      - web
-#    restart:
-#      - always
-#    networks:
-#      - postgres
+  tg_bot:
+    container_name: bot_container
+    build: ./bot
+    environment:
+      TG_TOKEN: "${TG_TOKEN:-change_me}"
+      HOST_PORT: "${HOST_PORT:-8000}"
+    ports:
+      - "443:443"
+    volumes:
+      - ./bot:/usr/src/bot
+    links:
+      - web
+    restart: always
+    networks:
+      - postgres
 
 volumes:
     postgres:
     pgadmin:
+    bot:
 
 networks:
   postgres:
