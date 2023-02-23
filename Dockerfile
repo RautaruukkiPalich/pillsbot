@@ -1,5 +1,4 @@
-# FROM python:3-alpine
-FROM debian
+FROM python:3-alpine
 
 RUN apk update && apk add libpq
 RUN apk update && apk add --virtual .build-deps gcc g++ linux-headers python3-dev \
