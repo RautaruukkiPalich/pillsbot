@@ -9,7 +9,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import StatesGroup, State
-from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE
+from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE, CANCEL
 from functions import create_markup, create_markup_pill
 
 bot = Bot(TOKEN)
@@ -79,7 +79,7 @@ async def start_bot(message: types.Message, state: FSMContext):
         memo["context"] = context
 
     await CreateUser.callback_timezone.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=CreateUser.callback_timezone)
@@ -148,8 +148,7 @@ async def add_pill(message: types.Message):
         return
 
     await AddPill.enter_pill_name.set()
-    await message.reply(f"Напиши название лекарства, о котором я буду тебе напоминать.\n\n"
-                        f"Для отмены заполнения этого поля можно нажать /cancel")
+    await message.reply("Напиши название лекарства, о котором я буду тебе напоминать"+CANCEL)
 
 
 @dp.message_handler(state=AddPill.enter_pill_name)
@@ -200,7 +199,7 @@ async def del_pill(message: types.Message, state: FSMContext):
         memo['url'] = url
 
     await DelPill.callback_pill_id.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=DelPill)
@@ -235,7 +234,7 @@ async def edit_pill(message: types.Message, state: FSMContext):
     response = requests.get(f"{HOST_URL}/user", data=json.dumps(context))
     response_text = json.loads(response.text)
 
-    if not response["in_database"] or not response_text["user"]["is_active"]:
+    if not response_text["in_database"] or not response_text["user"]["is_active"]:
         await message.answer(response_text["text"])
         return
 
@@ -251,7 +250,7 @@ async def edit_pill(message: types.Message, state: FSMContext):
         memo['text_message'] = text_message
 
     await EditPillName.callback_pill_id.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=EditPillName.callback_pill_id)
@@ -263,8 +262,7 @@ async def callback(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text(text_message)
     await EditPillName.enter_pill_name.set()
-    await message.answer(f"Введите новое название\n\n"
-                         f"Для отмены заполнения этого поля можно нажать /cancel")
+    await message.answer(f"Введите новое название"+CANCEL)
 
 
 @dp.message_handler(state=EditPillName.enter_pill_name)
@@ -316,7 +314,7 @@ async def new_schedule(message: types.Message, state: FSMContext):
     markup = create_markup_pill(response_text["pills"])
 
     await EnterScheduleTime.callback_time4zone.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=EnterScheduleTime.callback_time4zone)
@@ -336,7 +334,7 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     markup = create_markup(TIME_4ZONE)
 
     await EnterScheduleTime.callback_time.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=EnterScheduleTime.callback_time)
@@ -357,7 +355,7 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     markup = create_markup(TIME_SELECT[time_period])
 
     await EnterScheduleTime.db_query.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=EnterScheduleTime.db_query)
@@ -436,7 +434,7 @@ async def del_schedule(message: types.Message, state: FSMContext):
     markup = create_markup_pill(response_text["pills"])
 
     await DelScheduleTime.callback_pill_id.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=DelScheduleTime.callback_pill_id)
@@ -464,7 +462,7 @@ async def new_schedule(callback: types.CallbackQuery, state: FSMContext):
     markup = create_markup(dict_timers)
 
     await DelScheduleTime.db_query.set()
-    await message.reply(text_message, reply_markup=markup)
+    await message.reply(text_message+CANCEL, reply_markup=markup)
 
 
 @dp.callback_query_handler(state=DelScheduleTime.db_query)
