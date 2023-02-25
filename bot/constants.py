@@ -7,6 +7,9 @@ HOST_ADD = os.environ.get("HOST_ADD", "web")
 HOST_PORT = os.environ.get("HOST_PORT", 8000)
 HOST_URL = f"http://{HOST_ADD}:{HOST_PORT}"
 TOKEN = os.environ.get("TG_TOKEN")
+
+CANCEL = "\n\nДля отмены заполнения этого поля можно нажать /cancel"
+
 TIME_4ZONE = {
     1: "0:00 - 5:30",
     2: "6:00 - 11:30",
