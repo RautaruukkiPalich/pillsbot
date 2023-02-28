@@ -9,11 +9,17 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.dispatcher.filters.state import StatesGroup, State
+
 from constants import TOKEN, HOST_URL, TIME_4ZONE, TIME_SELECT, TIMEZONE, CANCEL
 from functions import create_markup, create_markup_pill
 
 bot = Bot(TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
+
+logging.basicConfig(
+    level=logging.INFO,
+    filename="bot.log"
+)
 
 
 class CreateUser(StatesGroup):
@@ -511,13 +517,15 @@ async def on_startup(_):
     asyncio.create_task(scheduler())
 
 
+async def on_shutdown(_):
+    logging.warning('Shutting down..')
+    logging.warning('Bye!')
+
+
 if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.INFO,
-        filename="bot.log"
-        )
     executor.start_polling(
         dp,
         skip_updates=True,
-        on_startup=on_startup
+        on_startup=on_startup,
+        on_shutdown=on_shutdown,
     )

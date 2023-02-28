@@ -65,11 +65,8 @@ services:
 
 volumes:
     postgres:
-      external: true
     pgadmin:
-      external: true
     bot:
-      external: true
 
 networks:
   postgres:

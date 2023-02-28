@@ -89,8 +89,8 @@ async def create_user(context: dict, db: Session = Depends(get_db)):
             if not output_json["user"]["is_active"]:
                 user = crud.get_user_by_tg(db, tg_id=tg_id)
                 crud.activate_user(db, user, timezone)
+                output_json = await get_user(context, db)
                 output_json["text"] = "Пользователь восстановлен"
-            return output_json
         else:
             crud.create_user(db, schemas.UserCreate(
                 tg_id=tg_id,
@@ -98,8 +98,9 @@ async def create_user(context: dict, db: Session = Depends(get_db)):
                 last_name=last_name,
                 timezone=timezone,
             ))
+            output_json = await get_user(context, db)
+            output_json["text"] = "Пользователь успешно добавлен"
 
-    output_json["text"] = "Пользователь успешно добавлен"
     return output_json
 
 
